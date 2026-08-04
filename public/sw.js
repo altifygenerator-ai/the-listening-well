@@ -1,4 +1,4 @@
-const CACHE = "listening-well-v3";
+const CACHE = "listening-well-v4";
 const APP_SHELL = ["/", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", event => {
@@ -10,7 +10,8 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET" || new URL(event.request.url).pathname.startsWith("/api/")) return;
+  const pathname = new URL(event.request.url).pathname;
+  if (event.request.method !== "GET" || pathname.startsWith("/api/") || pathname.startsWith("/_vercel/")) return;
   event.respondWith(fetch(event.request).then(response => {
     const copy = response.clone();
     caches.open(CACHE).then(cache => cache.put(event.request, copy));

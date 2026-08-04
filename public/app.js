@@ -1,7 +1,8 @@
 const STORAGE_KEY = "listening-well-state-v1";
 const SHARE_NAME = "The Listening Well";
-const TOSS_DURATION_MS = 1450;
-const SPLASH_TRIGGER_MS = 1220;
+const TOSS_DURATION_MS = 1900;
+const SPLASH_TRIGGER_MS = 1600;
+const MIN_RITUAL_DURATION_MS = 3200;
 
 const memoryStorage = new Map();
 
@@ -256,7 +257,12 @@ function trackEvent(name, details = {}) {
   state.conversionEvents = state.conversionEvents.slice(-120);
   saveState();
   try {
-    window.va?.track?.(name, details);
+    const data = Object.fromEntries(
+      Object.entries(details)
+        .filter(([, value]) => value === null || ["string", "number", "boolean"].includes(typeof value))
+        .slice(0, 2)
+    );
+    window.va?.("event", { name, data });
   } catch {
     // Analytics is optional. Local events still make launch testing inspectable.
   }
@@ -451,6 +457,7 @@ function preparePenny() {
 }
 
 function editWish() {
+  trackEvent("wish_edit_clicked");
   elements.coinDock.hidden = true;
   elements.wishComposer.hidden = false;
   elements.introCopy.style.opacity = "";
@@ -659,7 +666,7 @@ async function tossPenny() {
 
   try {
     const response = await responsePromise;
-    const remaining = Math.max(0, 1900 - (Date.now() - started));
+    const remaining = Math.max(0, MIN_RITUAL_DURATION_MS - (Date.now() - started));
     if (remaining) await new Promise(resolve => setTimeout(resolve, remaining));
     if (response.safety) {
       restoreLocalCoin(localCoinSource);
@@ -959,6 +966,7 @@ async function canvasBlob() {
 
 function openShare() {
   if (!runtime.currentRecord) return;
+  trackEvent("share_card_opened", { coin: runtime.currentRecord.coinSource });
   renderShareCard(runtime.currentRecord);
   openOverlay(elements.shareModal);
 }
@@ -1295,8 +1303,10 @@ function registerPWA() {
   });
   elements.installButton.addEventListener("click", async () => {
     if (!runtime.installPrompt) return;
+    trackEvent("install_prompt_clicked");
     runtime.installPrompt.prompt();
-    await runtime.installPrompt.userChoice;
+    const choice = await runtime.installPrompt.userChoice;
+    trackEvent("install_prompt_result", { outcome: choice?.outcome || "unknown" });
     runtime.installPrompt = null;
     elements.installButton.hidden = true;
   });
@@ -1345,13 +1355,25 @@ function bindEvents() {
     elements.penny.style.transform = "";
   });
 
-  elements.closeResponse.addEventListener("click", () => resetExperience());
-  elements.newWishButton.addEventListener("click", () => resetExperience());
-  elements.homeButton.addEventListener("click", () => resetExperience());
+  elements.closeResponse.addEventListener("click", () => {
+    trackEvent("response_closed");
+    resetExperience();
+  });
+  elements.newWishButton.addEventListener("click", () => {
+    trackEvent("return_to_well_clicked", { source: "response" });
+    resetExperience();
+  });
+  elements.homeButton.addEventListener("click", () => {
+    trackEvent("return_to_well_clicked", { source: "brand" });
+    resetExperience();
+  });
   elements.sealButton.addEventListener("click", openSealModal);
   elements.shareButton.addEventListener("click", openShare);
   elements.journalButton.addEventListener("click", openJournal);
-  elements.pennyButton.addEventListener("click", () => openOverlay(elements.pennyModal));
+  elements.pennyButton.addEventListener("click", () => {
+    trackEvent("penny_wallet_opened", { source: "header" });
+    openOverlay(elements.pennyModal);
+  });
   elements.upgradeButton.addEventListener("click", () => {
     trackEvent("upgrade_offer_clicked", { theme: runtime.currentRecord?.response?.theme || "unknown" });
     openOverlay(elements.pennyModal);
@@ -1382,6 +1404,9 @@ function bindEvents() {
     if (runtime.returnedWish) openSavedWish(runtime.returnedWish, { revisit: true });
   });
 
+  $$(".legal-links a").forEach(link => link.addEventListener("click", () => {
+    trackEvent("legal_link_clicked", { page: link.getAttribute("href") || "unknown" });
+  }));
   $$('[data-close-drawer]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.journalDrawer)));
   $$('[data-close-modal]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.pennyModal)));
   $$('[data-close-seal]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.sealModal)));

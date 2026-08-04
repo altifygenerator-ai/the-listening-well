@@ -2,12 +2,10 @@
 .DS_Store
 node_modules/
 *.log
-# Environment secrets
 .env
 .env.local
 .env.*
 !.env.example
 
-# Dependencies and deployment
 node_modules/
 .vercel/
