@@ -1,0 +1,15 @@
+{
+  "name": "the-listening-well",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A mobile-first animated AI wishing well with distinct daily, copper, and moon experiences, Supabase storage, Stripe payments, webhook auditing, and a secure admin panel.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "check": "node scripts/check-project.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

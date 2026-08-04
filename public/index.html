@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#071610" />
+  <meta name="description" content="Throw in a penny. Make a private wish. Hear what the well has to say." />
+  <meta property="og:title" content="The Listening Well" />
+  <meta property="og:description" content="Throw in a penny. Make a wish. Hear what the well has to say." />
+  <meta property="og:image" content="/og-image.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <title>The Listening Well</title>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <div class="ambient-noise" aria-hidden="true"></div>
+    <header class="topbar">
+      <button class="brand" id="homeButton" aria-label="Return to the well">
+        <span class="brand-mark" aria-hidden="true">◌</span>
+        <span>
+          <strong>The Listening Well</strong>
+          <small>Private wishes. Thoughtful echoes.</small>
+        </span>
+      </button>
+      <nav class="top-actions" aria-label="Well controls">
+        <button class="chip-button" id="pennyButton" aria-label="View pennies">
+          <span class="mini-coin" aria-hidden="true">1¢</span>
+          <span id="pennyCount">1</span>
+        </button>
+        <button class="icon-button" id="journalButton" aria-label="Open wish journal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h10.5A1.5 1.5 0 0 1 18 5v14.5c-1.2-.7-2.6-1-4-1H6A2 2 0 0 1 4 16.5v-11a2 2 0 0 1 2-2Zm0 0v13h8c1.5 0 2.8.3 4 .9M8 8h6M8 11h5"/></svg>
+          <span class="desktop-label">Journal</span>
+          <span class="notification-dot" id="journalDot" hidden></span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="experience" id="experience">
+      <section class="sky-scene" aria-label="A moonlit wishing well">
+        <div class="moon" aria-hidden="true"><span></span></div>
+        <div class="cloud cloud-one" aria-hidden="true"></div>
+        <div class="cloud cloud-two" aria-hidden="true"></div>
+        <div class="stars" id="stars" aria-hidden="true"></div>
+        <div class="distant-hills" aria-hidden="true"></div>
+        <div class="tree-line" aria-hidden="true"></div>
+        <div class="ground-glow" aria-hidden="true"></div>
+
+        <div class="garden" id="garden" aria-hidden="true">
+          <div class="garden-vines"></div>
+          <div class="flower flower-a"></div>
+          <div class="flower flower-b"></div>
+          <div class="flower flower-c"></div>
+          <div class="lily lily-a"></div>
+          <div class="lily lily-b"></div>
+          <div class="lantern"><span></span></div>
+          <div class="fireflies" id="fireflies"></div>
+        </div>
+
+        <div class="well-stage" id="wellStage">
+          <div class="well-rope" aria-hidden="true"><span></span></div>
+          <div class="well" id="well">
+            <div class="well-back"></div>
+            <div class="well-opening">
+              <div class="water-surface" id="waterSurface">
+                <span class="water-shimmer shimmer-one"></span>
+                <span class="water-shimmer shimmer-two"></span>
+                <span class="ripple ripple-one"></span>
+                <span class="ripple ripple-two"></span>
+                <span class="splash splash-one"></span>
+                <span class="splash splash-two"></span>
+                <span class="well-light"></span>
+              </div>
+            </div>
+            <div class="well-rim">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="well-body">
+              <span class="stone s1"></span><span class="stone s2"></span><span class="stone s3"></span>
+              <span class="stone s4"></span><span class="stone s5"></span><span class="stone s6"></span>
+              <span class="stone s7"></span><span class="stone s8"></span><span class="stone s9"></span>
+              <span class="stone s10"></span><span class="stone s11"></span><span class="stone s12"></span>
+            </div>
+            <div class="moss moss-left"></div>
+            <div class="moss moss-right"></div>
+          </div>
+          <div class="well-shadow" aria-hidden="true"></div>
+        </div>
+
+        <section class="intro-copy" id="introCopy">
+          <p class="eyebrow">A quiet place for the things you hope for</p>
+          <h1>Some wishes need<br />somewhere to land.</h1>
+          <p>Place one private wish into a penny. The well will answer with an echo, a meaning, and one step forward.</p>
+        </section>
+
+        <section class="wish-composer glass-panel" id="wishComposer" aria-labelledby="wishPrompt">
+          <div class="composer-heading">
+            <div>
+              <p class="step-label">Your daily penny is waiting</p>
+              <h2 id="wishPrompt">What are you wishing for?</h2>
+            </div>
+            <span class="privacy-mark" title="Private by default">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6.5 10h11A1.5 1.5 0 0 1 19 11.5v7A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10Z"/></svg>
+              Private
+            </span>
+          </div>
+          <label class="sr-only" for="wishInput">Type your private wish</label>
+          <textarea id="wishInput" maxlength="600" rows="3" placeholder="I wish…" autocomplete="off"></textarea>
+          <div class="composer-footer">
+            <span id="characterCount">0 / 600</span>
+            <button class="primary-button" id="readyButton">Place it in the penny</button>
+          </div>
+        </section>
+
+        <section class="coin-dock" id="coinDock" hidden>
+          <div class="coin-choice" id="coinChoice" hidden aria-label="Choose which penny to throw">
+            <button type="button" data-coin-choice="daily"><span class="choice-dot daily-dot">1¢</span><b>Daily</b><small id="dailyChoiceCount">1 ready</small></button>
+            <button type="button" data-coin-choice="copper"><span class="choice-dot copper-dot">C</span><b>Copper</b><small id="copperChoiceCount">0 ready</small></button>
+            <button type="button" data-coin-choice="moon"><span class="choice-dot moon-dot">☾</span><b>Moon</b><small id="moonChoiceCount">0 ready</small></button>
+          </div>
+          <p id="coinInstruction">Tap the penny or flick it toward the water</p>
+          <button class="penny" id="penny" aria-label="Throw your penny into the wishing well">
+            <span class="penny-face penny-front"><b>1</b><small>ONE WISH</small></span>
+            <span class="penny-face penny-back"><b>W</b><small>LISTEN</small></span>
+          </button>
+          <button class="text-button" id="editWishButton">Edit my wish</button>
+        </section>
+
+        <section class="listening-state" id="listeningState" hidden aria-live="polite">
+          <span class="listening-rings"><i></i><i></i><i></i></span>
+          <p>The well is listening<span class="thinking-dots"><i>.</i><i>.</i><i>.</i></span></p>
+        </section>
+
+        <section class="response-card glass-panel" id="responseCard" hidden aria-live="polite">
+          <button class="close-response" id="closeResponse" aria-label="Close response">×</button>
+          <div class="response-mark" aria-hidden="true">◌</div>
+          <p class="eyebrow" id="responseModeLabel">The water answers</p>
+          <blockquote id="answerText"></blockquote>
+          <div class="response-divider"><span></span></div>
+          <div class="response-section">
+            <h3>What the wish may be showing</h3>
+            <p id="meaningText"></p>
+          </div>
+          <div class="carry-card">
+            <span>Carry this with you</span>
+            <p id="nextStepText"></p>
+          </div>
+          <section class="upgrade-offer" id="upgradeOffer" hidden>
+            <div class="upgrade-glow" aria-hidden="true"></div>
+            <p class="eyebrow">The water has more to say</p>
+            <h3 id="upgradeTitle">Go deeper with your next penny</h3>
+            <p id="upgradeText">Purchased pennies unlock a longer Deep Water response, a stronger follow-up, and a brighter share card.</p>
+            <div class="upgrade-benefits" aria-label="Deep Water penny benefits">
+              <span>Deeper response</span>
+              <span>Guided follow-up</span>
+              <span>Premium share card</span>
+            </div>
+            <div class="upgrade-actions">
+              <button class="gold-button" id="upgradeButton">See Deep Water pennies</button>
+              <button class="quiet-button" id="giftFromResponseButton">Invite a friend</button>
+            </div>
+          </section>
+          <div class="response-actions">
+            <button class="secondary-button" id="sealButton">Seal for later</button>
+            <button class="primary-button" id="shareButton">Share the echo</button>
+          </div>
+          <button class="text-button centered" id="newWishButton">Return to the well</button>
+        </section>
+
+        <button class="install-prompt" id="installButton" hidden>
+          <span>+</span>
+          Add the well to your phone
+        </button>
+        <footer class="legal-links">
+          <span>Reflection, not prediction.</span>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+        </footer>
+      </section>
+    </main>
+
+    <aside class="drawer" id="journalDrawer" aria-hidden="true">
+      <div class="drawer-backdrop" data-close-drawer></div>
+      <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="journalTitle">
+        <header class="drawer-header">
+          <div>
+            <p class="eyebrow">What the water remembers</p>
+            <h2 id="journalTitle">Your private journal</h2>
+          </div>
+          <button class="icon-button close-drawer-button" data-close-drawer aria-label="Close journal">×</button>
+        </header>
+
+        <div class="stats-row">
+          <div><strong id="totalRipples">0</strong><span>Ripples</span></div>
+          <div><strong id="daysVisited">1</strong><span>Days visited</span></div>
+          <div><strong id="gardenDepth">Still</strong><span>Well depth</span></div>
+        </div>
+
+        <div class="return-card" id="returnCard" hidden>
+          <span class="return-icon">↺</span>
+          <div>
+            <strong>An old wish has returned</strong>
+            <p id="returnCardText">Something you placed here is ready to revisit.</p>
+          </div>
+          <button id="revisitButton">Open</button>
+        </div>
+
+        <section class="journal-section">
+          <div class="section-heading">
+            <div>
+              <h3>Saved wishes</h3>
+              <p>Only this device can see local wishes.</p>
+            </div>
+          </div>
+          <div class="wish-list" id="wishList"></div>
+          <div class="empty-state" id="journalEmpty">
+            <span>◌</span>
+            <p>Your first ripple will appear here.</p>
+          </div>
+        </section>
+
+        <section class="monthly-card" id="monthlyCard">
+          <div>
+            <p class="eyebrow">Once each month</p>
+            <h3>Hear the month’s echo</h3>
+            <p>The well can quietly notice what you keep returning to without repeating your private words.</p>
+          </div>
+          <button class="secondary-button" id="monthlyButton" disabled>Needs 3 wishes</button>
+        </section>
+
+        <section class="reflection-history" id="reflectionHistory" hidden>
+          <div class="section-heading">
+            <h3>Past monthly echoes</h3>
+            <p>Quiet patterns the well has noticed over time.</p>
+          </div>
+          <div class="reflection-list" id="reflectionList"></div>
+        </section>
+
+        <footer class="drawer-footer">
+          <button class="text-button" id="exportButton">Export my journal</button>
+          <button class="text-button danger" id="clearButton">Clear this device</button>
+        </footer>
+      </div>
+    </aside>
+
+    <aside class="modal" id="pennyModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pennyModalTitle">
+        <button class="modal-close" data-close-modal aria-label="Close">×</button>
+        <div class="modal-coin" aria-hidden="true">1¢</div>
+        <p class="eyebrow">Keep the water moving</p>
+        <h2 id="pennyModalTitle">More pennies for the well</h2>
+        <p class="modal-lead" id="pennyModalLead">Your daily penny gives one complete echo. Copper and moon pennies each unlock a different premium experience.</p>
+        <div class="wallet-summary" aria-label="Your penny wallet">
+          <div><span class="wallet-coin daily-wallet">1¢</span><b id="walletDaily">1</b><small>Daily</small></div>
+          <div><span class="wallet-coin copper-wallet">C</span><b id="walletCopper">0</b><small>Copper</small></div>
+          <div><span class="wallet-coin moon-wallet">☾</span><b id="walletMoon">0</b><small>Moon</small></div>
+        </div>
+        <div class="purchase-trust" aria-label="Purchase details">
+          <span>Secure Stripe checkout</span>
+          <span>No account required</span>
+          <span>Credits stay in your well</span>
+        </div>
+        <div class="price-options">
+          <button class="price-card" data-pack="copper_10">
+            <span><strong>10 copper pennies</strong><small>Deeper answers with warm copper styling</small></span>
+            <b>$2.99</b>
+          </button>
+          <button class="price-card featured" data-pack="moon_30">
+            <em>Most popular</em>
+            <span><strong>30 moon pennies</strong><small>Moon Water answers, stronger insight • best value</small></span>
+            <b>$4.99</b>
+          </button>
+          <button class="price-card" data-pack="keeper_monthly">
+            <span><strong>Well Keeper</strong><small>90 moon pennies each month</small></span>
+            <b>$4.99<small>/mo</small></b>
+          </button>
+        </div>
+        <button class="gift-button" id="giftButton">Invite someone to throw their first penny</button>
+        <p class="payment-note" id="paymentNote">Payments stay in preview until Supabase and Stripe are connected.</p>
+      </div>
+    </aside>
+
+    <aside class="modal" id="sealModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-seal></div>
+      <div class="modal-card small-modal" role="dialog" aria-modal="true" aria-labelledby="sealTitle">
+        <button class="modal-close" data-close-seal aria-label="Close">×</button>
+        <div class="seal-symbol" aria-hidden="true">⌁</div>
+        <p class="eyebrow">Let time carry it</p>
+        <h2 id="sealTitle">When should this wish return?</h2>
+        <p class="modal-lead">The wish stays in your journal, but its words remain hidden until the date you choose.</p>
+        <div class="seal-options">
+          <button data-days="7"><strong>7 days</strong><span>A gentle check-in</span></button>
+          <button data-days="30"><strong>30 days</strong><span>See what shifted</span></button>
+          <button data-days="365"><strong>1 year</strong><span>A message across time</span></button>
+        </div>
+      </div>
+    </aside>
+
+    <aside class="modal" id="shareModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-share></div>
+      <div class="modal-card share-modal-card" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+        <button class="modal-close" data-close-share aria-label="Close">×</button>
+        <p class="eyebrow">Your wish stays private</p>
+        <h2 id="shareTitle">Share only the echo</h2>
+        <canvas id="shareCanvas" width="1080" height="1350" aria-label="Share card preview"></canvas>
+        <div class="share-actions">
+          <button class="secondary-button" id="copyShareButton">Copy words</button>
+          <button class="primary-button" id="nativeShareButton">Share card</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

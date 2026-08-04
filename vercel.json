@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/*.js", "use": "@vercel/node" },
+    { "src": "public/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/admin/setup", "dest": "/api/admin-setup.js" },
+    { "src": "/api/admin/login", "dest": "/api/admin-login.js" },
+    { "src": "/api/admin/logout", "dest": "/api/admin-logout.js" },
+    { "src": "/api/admin/me", "dest": "/api/admin-me.js" },
+    { "src": "/api/admin/dashboard", "dest": "/api/admin-dashboard.js" },
+    { "src": "/api/admin/grant", "dest": "/api/admin-grant.js" },
+    { "src": "/api/(.*)", "dest": "/api/$1.js" },
+    { "src": "/", "dest": "/public/index.html" },
+    { "src": "/(.*)", "dest": "/public/$1" }
+  ]
+}
