@@ -55,26 +55,38 @@ function responseDepth(coinSource) {
   return "standard";
 }
 
-async function persistWish({ sessionId, wish, response, coinSource }) {
+async function persistWish({ sessionId, wish, response, coinSource, followUp = null }) {
   if (!process.env.SUPABASE_URL || !(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) return null;
   await rpc("touch_well_profile", { p_session_id: sessionId });
-  const rows = await supabaseRequest("wishes", {
-    method: "POST",
-    body: JSON.stringify({
-      session_id: sessionId,
-      wish_text: wish,
-      answer: response.answer,
-      meaning: response.meaning,
-      next_step: response.nextStep,
-      share_line: response.shareLine,
-      follow_up_question: response.followUpQuestion,
-      mood: response.mood,
-      theme: response.theme || "uncertainty",
-      coin_source: coinSource || "local",
-      safety: response.safety || null
-    })
-  });
-  return rows?.[0]?.id || null;
+  const baseRow = {
+    session_id: sessionId,
+    wish_text: wish,
+    answer: response.answer,
+    meaning: response.meaning,
+    next_step: response.nextStep,
+    share_line: response.shareLine,
+    follow_up_question: response.followUpQuestion,
+    mood: response.mood,
+    theme: response.theme || "uncertainty",
+    coin_source: coinSource || "local",
+    safety: response.safety || null
+  };
+  const extendedRow = followUp ? {
+    ...baseRow,
+    response_kind: "follow_up",
+    parent_wish_id: uuidLike(followUp.parentCloudId) ? followUp.parentCloudId : null,
+    follow_up_prompt: followUp.question,
+    follow_up_direction: followUp.direction
+  } : baseRow;
+  try {
+    const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(extendedRow) });
+    return rows?.[0]?.id || null;
+  } catch (error) {
+    const legacySchema = followUp && /response_kind|parent_wish_id|follow_up_prompt|follow_up_direction|schema cache/i.test(String(error.message));
+    if (!legacySchema) throw error;
+    const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(baseRow) });
+    return rows?.[0]?.id || null;
+  }
 }
 
 export default async function handler(req, res) {
@@ -87,9 +99,24 @@ export default async function handler(req, res) {
     const wish = sanitizeWish(body.wish);
     const sessionId = String(body.sessionId || "");
     const priorThemes = Array.isArray(body.priorThemes) ? body.priorThemes.map(String).slice(-5) : [];
+    const priorContext = Array.isArray(body.priorContext)
+      ? body.priorContext.slice(-3).map(item => ({
+          theme: String(item?.theme || "uncertainty").slice(0, 40),
+          wish: sanitizeWish(item?.wish).slice(0, 220)
+        })).filter(item => item.wish)
+      : [];
     const coinIntent = normalizeCoinIntent(body.coinIntent);
+    const followUp = body.followUp && typeof body.followUp === "object" ? {
+      parentCloudId: uuidLike(body.followUp.parentCloudId) ? body.followUp.parentCloudId : null,
+      originalAnswer: sanitizeWish(body.followUp.originalAnswer).slice(0, 900),
+      originalMeaning: sanitizeWish(body.followUp.originalMeaning).slice(0, 700),
+      question: sanitizeWish(body.followUp.question).slice(0, 320),
+      direction: ["clarity", "action", "release", "custom"].includes(body.followUp.direction) ? body.followUp.direction : "custom"
+    } : null;
 
     if (!wish || wish.length < 3) return jsonResponse(res, 400, { error: "Please give the well a little more to listen to." });
+    if (followUp && followUp.question.length < 4) return jsonResponse(res, 400, { error: "Ask the well one clear follow-up question." });
+    if (followUp && coinIntent === "daily") return jsonResponse(res, 400, { error: "Follow-up echoes require a Copper or Moon penny." });
     if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "Invalid session" });
     if (!rateAllowed(req, sessionId)) {
       res.setHeader("Retry-After", "3600");
@@ -97,13 +124,15 @@ export default async function handler(req, res) {
     }
 
     let response = null;
-    const localSafety = detectLocalSafety(wish);
+    const moderationInput = followUp ? `${wish}
+Follow-up: ${followUp.question}` : wish;
+    const localSafety = detectLocalSafety(moderationInput);
     if (localSafety === "crisis") response = crisisResponse();
     if (localSafety === "harm") response = harmfulResponse();
 
     if (!response && process.env.OPENAI_API_KEY) {
       try {
-        const moderation = await moderateWish(wish, process.env.OPENAI_API_KEY);
+        const moderation = await moderateWish(moderationInput, process.env.OPENAI_API_KEY);
         if (isSelfHarm(moderation.categories)) response = crisisResponse();
         if (isViolence(moderation.categories)) response = harmfulResponse();
       } catch (error) {
@@ -138,6 +167,8 @@ export default async function handler(req, res) {
           ? await generateOpenAIWish({
               wish,
               priorThemes,
+              priorContext,
+              followUp,
               apiKey: process.env.OPENAI_API_KEY,
               model: process.env.OPENAI_MODEL || "gpt-5",
               depth,
@@ -151,10 +182,10 @@ export default async function handler(req, res) {
     }
 
     let wishId = null;
-    if (!response.safety) wishId = await persistWish({ sessionId, wish, response, coinSource });
+    if (!response.safety) wishId = await persistWish({ sessionId, wish, response, coinSource, followUp });
     refundableCoin = null;
 
-    return jsonResponse(res, 200, { ...response, coinSource, wishId });
+    return jsonResponse(res, 200, { ...response, coinSource, wishId, responseKind: followUp ? "follow_up" : "wish" });
   } catch (error) {
     console.error(error);
     if (refundableCoin && refundableSessionId) {

@@ -111,6 +111,26 @@ async function openAIAudit() {
     assert.equal(payload.text.format.strict, true);
     assert.equal(payload.store, false);
     assert.ok(payload.safety_identifier);
+
+    payload = null;
+    const followUpResult = await generateOpenAIWish({
+      wish: "I wish I could make my business dependable",
+      apiKey: "test",
+      depth: "deep",
+      safetyIdentifier: "session",
+      priorContext: [{ theme: "money", wish: "I want steadier income", createdAt: "2026-08-01T12:00:00.000Z" }],
+      followUp: {
+        direction: "action",
+        question: "What should I do first?",
+        originalAnswer: "Choose one path and stay with it.",
+        originalMeaning: "You want stability more than novelty."
+      }
+    });
+    assert.equal(followUpResult.source, "openai-deep-follow-up");
+    assert.match(payload.input, /CONVERSATION TYPE: FOLLOW-UP/);
+    assert.match(payload.input, /FOLLOW-UP DIRECTION: ACTION/);
+    assert.match(payload.input, /What should I do first\?/);
+    assert.match(payload.input, /RECENT PRIVATE CONTEXT/);
   } finally {
     globalThis.fetch = originalFetch;
   }

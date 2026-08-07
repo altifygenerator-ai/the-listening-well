@@ -159,16 +159,16 @@
         </div>
 
         <section class="intro-copy" id="introCopy">
-          <p class="eyebrow">A quiet place for the things you hope for</p>
-          <h1>Some wishes need<br />somewhere to land.</h1>
-          <p>Place one private wish into a penny. The well will answer with an echo, a meaning, and one step forward.</p>
+          <p class="eyebrow">A private place for one honest wish</p>
+          <h1>Throw a penny.<br />Hear what comes back.</h1>
+          <p>Type one private wish. Your first penny is free.</p>
         </section>
 
         <section class="wish-composer glass-panel" id="wishComposer" aria-labelledby="wishPrompt">
           <div class="composer-heading">
             <div>
-              <p class="step-label">Your daily penny is waiting</p>
-              <h2 id="wishPrompt">What are you wishing for?</h2>
+              <p class="step-label">Your penny is waiting</p>
+              <h2 id="wishPrompt">What do you want the well to hear?</h2>
             </div>
             <span class="privacy-mark" title="Private by default">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6.5 10h11A1.5 1.5 0 0 1 19 11.5v7A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10Z"/></svg>
@@ -184,6 +184,9 @@
         </section>
 
         <section class="coin-dock" id="coinDock" hidden>
+          <button class="coin-choice-toggle" id="coinChoiceToggle" type="button" hidden aria-expanded="false">
+            Use a different penny
+          </button>
           <div class="coin-choice" id="coinChoice" hidden aria-label="Choose which penny to throw">
             <button type="button" data-coin-choice="daily"><span class="choice-dot daily-dot">1¢</span><b>Daily</b><small id="dailyChoiceCount">1 ready</small></button>
             <button type="button" data-coin-choice="copper"><span class="choice-dot copper-dot">C</span><b>Copper</b><small id="copperChoiceCount">0 ready</small></button>
@@ -208,34 +211,32 @@
           <p class="eyebrow" id="responseModeLabel">The water answers</p>
           <blockquote id="answerText"></blockquote>
           <div class="response-divider"><span></span></div>
-          <div class="response-section">
-            <h3>What the wish may be showing</h3>
+          <details class="response-insight" id="responseInsight">
+            <summary>Why this wish may matter</summary>
             <p id="meaningText"></p>
-          </div>
+          </details>
           <div class="carry-card">
             <span>Carry this with you</span>
             <p id="nextStepText"></p>
           </div>
           <section class="upgrade-offer" id="upgradeOffer" hidden>
             <div class="upgrade-glow" aria-hidden="true"></div>
-            <p class="eyebrow">The water has more to say</p>
-            <h3 id="upgradeTitle">Go deeper with your next penny</h3>
-            <p id="upgradeText">Purchased pennies unlock a longer Deep Water response, a stronger follow-up, and a brighter share card.</p>
-            <div class="upgrade-benefits" aria-label="Deep Water penny benefits">
-              <span>Deeper response</span>
-              <span>Guided follow-up</span>
-              <span>Premium share card</span>
-            </div>
-            <div class="upgrade-actions">
-              <button class="gold-button" id="upgradeButton">See Deep Water pennies</button>
-              <button class="quiet-button" id="giftFromResponseButton">Invite a friend</button>
-            </div>
+            <p class="eyebrow">Continue this wish</p>
+            <h3 id="upgradeTitle">Ask the well one more question</h3>
+            <p id="upgradeText">Use a Copper or Moon penny to continue this exact wish instead of starting over.</p>
+            <button class="gold-button full-width" id="upgradeButton">Go deeper into this wish</button>
           </section>
-          <div class="response-actions">
-            <button class="secondary-button" id="sealButton">Seal for later</button>
-            <button class="primary-button" id="shareButton">Share the echo</button>
+          <div class="response-actions compact-actions">
+            <button class="quiet-action" id="sealButton">Seal for later</button>
+            <button class="quiet-action" id="shareButton">Share the echo</button>
           </div>
-          <button class="text-button centered" id="newWishButton">Return to the well</button>
+          <details class="response-more" id="responseMore">
+            <summary>More from the well</summary>
+            <div class="response-more-actions">
+              <button class="text-button" id="giftFromResponseButton">Send someone a penny</button>
+              <button class="text-button" id="newWishButton">Start a new wish</button>
+            </div>
+          </details>
         </section>
 
         <button class="install-prompt" id="installButton" hidden>
@@ -334,21 +335,51 @@
         </div>
         <div class="price-options">
           <button class="price-card" data-pack="copper_10">
-            <span><strong>10 copper pennies</strong><small>Deeper answers with warm copper styling</small></span>
+            <span><strong>Continue with Copper</strong><small>10 guided follow-ups and deeper practical echoes</small></span>
             <b>$2.99</b>
           </button>
           <button class="price-card featured" data-pack="moon_30">
-            <em>Most popular</em>
-            <span><strong>30 moon pennies</strong><small>Moon Water answers, stronger insight • best value</small></span>
+            <em>Best experience</em>
+            <span><strong>Unlock Moon Water</strong><small>30 premium echoes with a perspective shift and moonlit card</small></span>
             <b>$4.99</b>
           </button>
-          <button class="price-card" data-pack="keeper_monthly">
-            <span><strong>Well Keeper</strong><small>90 moon pennies each month</small></span>
+        </div>
+        <details class="keeper-option" id="keeperDetails">
+          <summary>Want monthly Moon pennies?</summary>
+          <button class="price-card keeper-card" data-pack="keeper_monthly">
+            <span><strong>Well Keeper</strong><small>90 Moon pennies added each month</small></span>
             <b>$4.99<small>/mo</small></b>
           </button>
-        </div>
+        </details>
         <button class="gift-button" id="giftButton">Invite someone to throw their first penny</button>
         <p class="payment-note" id="paymentNote">Payments stay in preview until Supabase and Stripe are connected.</p>
+      </div>
+    </aside>
+
+    <aside class="modal" id="followUpModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-followup></div>
+      <div class="modal-card follow-up-card" role="dialog" aria-modal="true" aria-labelledby="followUpTitle">
+        <button class="modal-close" data-close-followup aria-label="Close">×</button>
+        <p class="eyebrow">Continue the same wish</p>
+        <h2 id="followUpTitle">What do you want to ask next?</h2>
+        <p class="follow-up-echo" id="followUpEcho"></p>
+        <div class="follow-up-directions" role="group" aria-label="Choose a follow-up direction">
+          <button type="button" data-follow-direction="clarity" data-follow-question="What am I overlooking here?">Give me clarity</button>
+          <button type="button" data-follow-direction="action" data-follow-question="What should I do first?">Help me take action</button>
+          <button type="button" data-follow-direction="release" data-follow-question="What may I need to stop carrying?">Help me let this go</button>
+          <button type="button" data-follow-direction="custom">Ask my own question</button>
+        </div>
+        <label class="sr-only" for="followUpInput">Your follow-up question</label>
+        <textarea id="followUpInput" rows="3" maxlength="320" placeholder="Ask one honest follow-up…"></textarea>
+        <p class="follow-up-note">Copper gives grounded clarity. Moon adds a deeper perspective shift.</p>
+        <div class="follow-up-coin-actions">
+          <button class="copper-follow-button" id="continueCopperButton">
+            <span>Continue with Copper</span><small id="followCopperBalance">0 ready</small>
+          </button>
+          <button class="moon-follow-button" id="continueMoonButton">
+            <span>Continue with Moon</span><small id="followMoonBalance">0 ready</small>
+          </button>
+        </div>
       </div>
     </aside>
 

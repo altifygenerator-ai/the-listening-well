@@ -1,8 +1,8 @@
 const STORAGE_KEY = "listening-well-state-v1";
 const SHARE_NAME = "The Listening Well";
-const TOSS_DURATION_MS = 1900;
-const SPLASH_TRIGGER_MS = 1600;
-const MIN_RITUAL_DURATION_MS = 3200;
+const TOSS_DURATION_MS = 2150;
+const SPLASH_TRIGGER_MS = 1810;
+const MIN_RITUAL_DURATION_MS = 3500;
 
 const memoryStorage = new Map();
 
@@ -58,7 +58,9 @@ const elements = {
   coinDock: $("#coinDock"),
   penny: $("#penny"),
   coinChoice: $("#coinChoice"),
+  coinChoiceToggle: $("#coinChoiceToggle"),
   coinChoiceButtons: $$('[data-coin-choice]'),
+  coinInstruction: $("#coinInstruction"),
   dailyChoiceCount: $("#dailyChoiceCount"),
   copperChoiceCount: $("#copperChoiceCount"),
   moonChoiceCount: $("#moonChoiceCount"),
@@ -68,6 +70,8 @@ const elements = {
   responseCard: $("#responseCard"),
   answerText: $("#answerText"),
   meaningText: $("#meaningText"),
+  responseInsight: $("#responseInsight"),
+  responseMore: $("#responseMore"),
   nextStepText: $("#nextStepText"),
   responseModeLabel: $("#responseModeLabel"),
   upgradeOffer: $("#upgradeOffer"),
@@ -75,6 +79,14 @@ const elements = {
   upgradeText: $("#upgradeText"),
   upgradeButton: $("#upgradeButton"),
   giftFromResponseButton: $("#giftFromResponseButton"),
+  followUpModal: $("#followUpModal"),
+  followUpEcho: $("#followUpEcho"),
+  followUpInput: $("#followUpInput"),
+  followDirectionButtons: $$('[data-follow-direction]'),
+  continueCopperButton: $("#continueCopperButton"),
+  continueMoonButton: $("#continueMoonButton"),
+  followCopperBalance: $("#followCopperBalance"),
+  followMoonBalance: $("#followMoonBalance"),
   closeResponse: $("#closeResponse"),
   newWishButton: $("#newWishButton"),
   sealButton: $("#sealButton"),
@@ -126,7 +138,10 @@ const runtime = {
   installPrompt: null,
   pointerStart: null,
   toastTimer: null,
-  returnedWish: null
+  returnedWish: null,
+  followUpContext: null,
+  followUpDraft: null,
+  coinChoicesExpanded: false
 };
 
 function localDateKey(date = new Date()) {
@@ -161,6 +176,7 @@ function freshState() {
     wishes: [],
     monthlyReflections: [],
     conversionEvents: [],
+    pendingFollowUp: null,
     settings: { sound: true, gentleReminders: true }
   };
 }
@@ -180,7 +196,8 @@ function loadState() {
       visitDays: Array.isArray(parsed.visitDays) ? parsed.visitDays : [],
       wishes: Array.isArray(parsed.wishes) ? parsed.wishes : [],
       monthlyReflections: Array.isArray(parsed.monthlyReflections) ? parsed.monthlyReflections : [],
-      conversionEvents: Array.isArray(parsed.conversionEvents) ? parsed.conversionEvents : []
+      conversionEvents: Array.isArray(parsed.conversionEvents) ? parsed.conversionEvents : [],
+      pendingFollowUp: parsed.pendingFollowUp && typeof parsed.pendingFollowUp === "object" ? parsed.pendingFollowUp : null
     };
   } catch {
     return freshState();
@@ -216,10 +233,11 @@ function availablePennies() {
 }
 
 function defaultCoinSource() {
+  if (!runtime.followUpContext && state.dailyAvailable) return "daily";
   if (coinBalance(state.selectedCoin) > 0) return state.selectedCoin;
-  if (state.dailyAvailable) return "daily";
   if (state.copperCredits > 0) return "copper";
   if (state.moonCredits > 0) return "moon";
+  if (state.dailyAvailable) return "daily";
   return null;
 }
 
@@ -302,6 +320,9 @@ function updateUI() {
   if (elements.dailyChoiceCount) elements.dailyChoiceCount.textContent = state.dailyAvailable ? "1 ready" : "used today";
   if (elements.copperChoiceCount) elements.copperChoiceCount.textContent = `${Math.max(0, Number(state.copperCredits || 0))} ready`;
   if (elements.moonChoiceCount) elements.moonChoiceCount.textContent = `${Math.max(0, Number(state.moonCredits || 0))} ready`;
+  if (elements.followCopperBalance) elements.followCopperBalance.textContent = state.copperCredits > 0 ? `${state.copperCredits} ready` : "Get Copper pennies";
+  if (elements.followMoonBalance) elements.followMoonBalance.textContent = state.moonCredits > 0 ? `${state.moonCredits} ready` : "Get Moon pennies";
+  if (runtime.installPrompt) elements.installButton.hidden = state.wishes.length < 1;
   elements.totalRipples.textContent = String(state.wishes.length);
   elements.daysVisited.textContent = String(state.visitDays.length);
   const level = getGardenLevel();
@@ -402,19 +423,29 @@ function setCoinVisual(source) {
   saveState();
 }
 
-function renderCoinChoices() {
+function renderCoinChoices({ forceCollapsed = false } = {}) {
   const availableTypes = ["daily", "copper", "moon"].filter(type => coinBalance(type) > 0);
-  elements.coinChoice.hidden = availableTypes.length < 2;
+  const canChoose = availableTypes.length > 1 && !runtime.followUpContext;
+  if (forceCollapsed || !canChoose) runtime.coinChoicesExpanded = false;
+  elements.coinChoiceToggle.hidden = !canChoose;
+  elements.coinChoiceToggle.setAttribute("aria-expanded", String(runtime.coinChoicesExpanded));
+  elements.coinChoice.hidden = !canChoose || !runtime.coinChoicesExpanded;
+  elements.coinChoice.classList.toggle("is-collapsed", !runtime.coinChoicesExpanded);
   for (const button of elements.coinChoiceButtons) button.hidden = coinBalance(button.dataset.coinChoice) < 1;
 }
 
 function resetExperience({ preserveText = false } = {}) {
   runtime.busy = false;
   runtime.currentRecord = null;
+  runtime.followUpContext = null;
+  runtime.followUpDraft = null;
+  runtime.coinChoicesExpanded = false;
   runtime.currentWish = preserveText ? elements.wishInput.value.trim() : "";
   elements.responseCard.hidden = true;
   elements.responseCard.classList.remove("deep-water-response", "copper-water-response", "moon-water-response");
   elements.upgradeOffer.hidden = true;
+  elements.responseInsight.open = false;
+  elements.responseMore.open = false;
   elements.listeningState.hidden = true;
   elements.coinDock.hidden = true;
   elements.wishComposer.hidden = false;
@@ -425,6 +456,8 @@ function resetExperience({ preserveText = false } = {}) {
   elements.appShell.classList.remove("tossing", "responded", "crisis-mode", "deep-water-mode", "copper-water-mode", "moon-water-mode");
   elements.penny.classList.remove("deep-water-penny", "copper-penny", "moon-penny");
   runtime.pendingCoinSource = null;
+  elements.coinInstruction.textContent = "Tap the penny or flick it toward the water";
+  renderCoinChoices({ forceCollapsed: true });
   if (!preserveText) {
     elements.wishInput.value = "";
     elements.characterCount.textContent = "0 / 600";
@@ -445,9 +478,12 @@ function preparePenny() {
     return;
   }
   runtime.currentWish = wish;
+  runtime.followUpContext = null;
+  elements.coinInstruction.textContent = "Tap the penny or flick it toward the water";
   const source = defaultCoinSource();
   setCoinVisual(source);
-  renderCoinChoices();
+  runtime.coinChoicesExpanded = false;
+  renderCoinChoices({ forceCollapsed: true });
   trackEvent("wish_ready", { coin: source, wishNumber: state.wishes.length + 1 });
   elements.wishComposer.hidden = true;
   elements.coinDock.hidden = false;
@@ -506,8 +542,14 @@ async function animateToss() {
   flyer.remove();
 }
 
-function priorThemes() {
-  return state.wishes.slice(-5).map(record => record.response?.theme || "").filter(Boolean);
+function priorContext(excludeId = null) {
+  return state.wishes
+    .filter(record => !record.response?.safety && !record.isMonthly && record.id !== excludeId)
+    .slice(-3)
+    .map(record => ({
+      theme: String(record.response?.theme || "uncertainty").slice(0, 40),
+      wish: String(record.wish || "").replace(/\s+/g, " ").trim().slice(0, 220)
+    }));
 }
 
 function clientSafetyResponse(wish) {
@@ -614,11 +656,41 @@ function moonifyFallback(response) {
   };
 }
 
-async function requestWishResponse(wish, coinIntent) {
+
+function followUpFallback(response, followUp, coinSource) {
+  const question = String(followUp?.question || "What should I notice next?").trim();
+  const direction = String(followUp?.direction || "clarity");
+  const directionLine = direction === "action"
+    ? "The useful answer is likely hiding in the first step that creates evidence, not the step that tries to solve everything."
+    : direction === "release"
+      ? "The weight may not be the wish itself, but the expectation that you must control every part of how it turns out."
+      : "The overlooked part may be the difference between what you deeply want and what you are currently able to influence.";
+  const base = coinSource === "moon" ? moonifyFallback(response) : deepenFallback(response);
+  return {
+    ...base,
+    answer: `${base.answer} Your follow-up asks, “${question.slice(0, 120)}” ${directionLine}`,
+    meaning: `${base.meaning} Keep the answer tied to the part of the wish that is concrete enough to name and small enough to act on.`,
+    nextStep: direction === "action"
+      ? "Write the smallest action that would create new information within 48 hours, then schedule it."
+      : direction === "release"
+        ? "Write down what is yours to carry and what is not, then choose one thing from the second list to stop rehearsing today."
+        : "Name one assumption you are making about this wish and find one way to test it gently.",
+    followUpQuestion: "What became clearer after you answered the question beneath the question?",
+    source: `${base.source || "offline"}-follow-up`
+  };
+}
+
+async function requestWishResponse(wish, coinIntent, followUp = null) {
   const response = await fetch("/api/wish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: state.sessionId, wish, priorThemes: priorThemes(), coinIntent })
+    body: JSON.stringify({
+      sessionId: state.sessionId,
+      wish,
+      priorContext: priorContext(followUp?.parentId || null),
+      coinIntent,
+      followUp
+    })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -650,14 +722,17 @@ async function tossPenny() {
   elements.appShell.classList.add("tossing");
 
   const started = Date.now();
-  const responsePromise = requestWishResponse(runtime.currentWish, localCoinSource).catch(error => {
+  const followUpContext = runtime.followUpContext ? { ...runtime.followUpContext } : null;
+  const responsePromise = requestWishResponse(runtime.currentWish, localCoinSource, followUpContext).catch(error => {
     if (error.code === "NO_COIN") throw error;
     console.warn("Using offline well response:", error);
     const safety = clientSafetyResponse(runtime.currentWish);
     const fallback = clientFallbackResponse(runtime.currentWish);
-    return safety || (localCoinSource === "moon"
+    if (safety) return safety;
+    if (followUpContext) return followUpFallback(fallback, followUpContext, localCoinSource);
+    return localCoinSource === "moon"
       ? moonifyFallback(fallback)
-      : localCoinSource === "copper" ? deepenFallback(fallback) : fallback);
+      : localCoinSource === "copper" ? deepenFallback(fallback) : fallback;
   });
 
   await animateToss();
@@ -676,6 +751,11 @@ async function tossPenny() {
       id: createId(),
       cloudId: response.wishId || null,
       wish: runtime.currentWish,
+      responseKind: followUpContext ? "follow_up" : "wish",
+      parentId: followUpContext?.parentId || null,
+      parentCloudId: followUpContext?.parentCloudId || null,
+      followUpPrompt: followUpContext?.question || null,
+      followUpDirection: followUpContext?.direction || null,
       response: {
         answer: response.answer,
         meaning: response.meaning,
@@ -696,9 +776,15 @@ async function tossPenny() {
       sharedAt: null
     };
     state.wishes.push(record);
-    trackEvent("wish_completed", { coin: record.coinSource, theme: record.response.theme, wishNumber: state.wishes.length });
+    trackEvent(followUpContext ? "paid_follow_up_completed" : "wish_completed", {
+      coin: record.coinSource,
+      theme: record.response.theme,
+      wishNumber: state.wishes.length
+    });
+    state.pendingFollowUp = null;
     saveState();
     showResponse(record);
+    runtime.followUpContext = null;
     updateUI();
   } catch (error) {
     restoreLocalCoin(localCoinSource);
@@ -715,13 +801,18 @@ async function tossPenny() {
 function showResponse(record) {
   runtime.currentRecord = record;
   runtime.currentWish = record.wish || "";
+  const isFollowUp = record.responseKind === "follow_up";
   const isMoon = record.coinSource === "moon" || record.response.source?.includes("moon");
   const isCopper = record.coinSource === "copper" || (!isMoon && record.response.source?.includes("deep"));
   const isPremium = isCopper || isMoon;
   elements.answerText.textContent = record.response.answer;
   elements.meaningText.textContent = record.response.meaning;
   elements.nextStepText.textContent = record.response.nextStep;
-  elements.responseModeLabel.textContent = isMoon ? "A Moon Water echo" : isCopper ? "A Deep Water echo" : "The water answers";
+  elements.responseModeLabel.textContent = isFollowUp
+    ? (isMoon ? "A Moon Water continuation" : "A deeper echo")
+    : isMoon ? "A Moon Water echo" : isCopper ? "A Deep Water echo" : "The water answers";
+  elements.responseInsight.open = Boolean(isPremium || isFollowUp);
+  elements.responseMore.open = false;
   elements.responseCard.classList.toggle("deep-water-response", isPremium);
   elements.responseCard.classList.toggle("copper-water-response", isCopper);
   elements.responseCard.classList.toggle("moon-water-response", isMoon);
@@ -740,15 +831,13 @@ function showResponse(record) {
   elements.sealButton.hidden = Boolean(record.isMonthly) || safetyResponse;
   elements.shareButton.hidden = safetyResponse;
   elements.shareButton.parentElement.hidden = safetyResponse;
-  const showUpgrade = !record.isMonthly && !safetyResponse && !isPremium;
+  elements.responseMore.hidden = safetyResponse;
+  const showUpgrade = !record.isMonthly && !safetyResponse && !isPremium && !isFollowUp;
   elements.upgradeOffer.hidden = !showUpgrade;
   if (showUpgrade) {
-    const isFirstWish = state.wishes.filter(wish => !wish.response?.safety).length <= 1;
-    elements.upgradeTitle.textContent = isFirstWish ? "Choose a deeper penny" : "Keep the water moving";
-    elements.upgradeText.textContent = isFirstWish
-      ? "Copper pennies open a deeper answer. Moon pennies add a longer pattern insight, a perspective shift, and their own moonlit share card."
-      : "Your daily echo is complete. Copper and moon pennies each unlock a distinct premium response.";
-    trackEvent("upgrade_offer_viewed", { firstWish: isFirstWish, theme: record.response.theme });
+    elements.upgradeTitle.textContent = "Ask the well one more question";
+    elements.upgradeText.textContent = "Continue this exact wish with guided clarity, a practical next move, or help letting something go.";
+    trackEvent("deep_echo_offer_viewed", { theme: record.response.theme, firstWish: state.wishes.length <= 1 });
   }
   runtime.busy = false;
   setTimeout(() => elements.responseCard.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
@@ -770,6 +859,12 @@ function createWishItem(record) {
   const status = document.createElement("span");
   status.textContent = unlocked ? (returned ? "Ready to revisit" : record.response?.theme || record.response?.mood || "Saved") : `Returns ${formatDate(record.sealedUntil, true)}`;
   if (returned) status.className = "wish-item-returned";
+  if (record.responseKind === "follow_up") {
+    const followLabel = document.createElement("span");
+    followLabel.className = "follow-up-label";
+    followLabel.textContent = "Follow-up";
+    status.append(followLabel);
+  }
   top.append(date, status);
 
   const wishText = document.createElement("p");
@@ -1077,8 +1172,147 @@ async function shareGiftPenny() {
   }
 }
 
+
+function setFollowUpDirection(direction, question = "") {
+  runtime.followUpDraft = {
+    ...(runtime.followUpDraft || {}),
+    direction,
+    question: String(question || "").trim()
+  };
+  for (const button of elements.followDirectionButtons) {
+    button.classList.toggle("selected", button.dataset.followDirection === direction);
+  }
+  if (question) elements.followUpInput.value = question;
+  if (direction === "custom") {
+    elements.followUpInput.value = runtime.followUpDraft.question || "";
+    setTimeout(() => elements.followUpInput.focus(), 60);
+  }
+}
+
+function buildFollowUpDraft(record = runtime.currentRecord) {
+  if (!record) return null;
+  const saved = state.pendingFollowUp && state.pendingFollowUp.parentId === record.id ? state.pendingFollowUp : null;
+  return {
+    parentId: record.id,
+    parentCloudId: record.cloudId || null,
+    originalWish: record.wish || "",
+    originalAnswer: record.response?.answer || "",
+    originalMeaning: record.response?.meaning || "",
+    direction: saved?.direction || "clarity",
+    question: saved?.question || "What am I overlooking here?"
+  };
+}
+
+function openFollowUp({ resume = false } = {}) {
+  const record = runtime.currentRecord || state.wishes.find(item => item.id === state.pendingFollowUp?.parentId);
+  if (!record || record.response?.safety || record.isMonthly) return;
+  runtime.currentRecord = record;
+  runtime.followUpDraft = buildFollowUpDraft(record);
+  elements.followUpEcho.textContent = `“${record.response?.shareLine || record.response?.answer || "The well is still listening."}”`;
+  elements.followUpInput.value = runtime.followUpDraft.question;
+  setFollowUpDirection(runtime.followUpDraft.direction, runtime.followUpDraft.question);
+  updateUI();
+  openOverlay(elements.followUpModal);
+  trackEvent(resume ? "follow_up_resumed" : "deep_echo_offer_clicked", {
+    theme: record.response?.theme || "unknown",
+    hasCredits: state.copperCredits + state.moonCredits > 0
+  });
+}
+
+function purchaseContextForFollowUp(coin) {
+  const label = coin === "moon" ? "Moon" : "Copper";
+  const title = document.querySelector("#pennyModalTitle");
+  const lead = document.querySelector("#pennyModalLead");
+  if (title) title.textContent = `Continue this wish with ${label}`;
+  if (lead) lead.textContent = coin === "moon"
+    ? "Moon pennies unlock the fullest continuation: deeper pattern insight, a perspective shift, and a moonlit share card."
+    : "Copper pennies let you ask one guided follow-up and receive a grounded answer tied to the wish you already made.";
+}
+
+function resetPurchaseContext() {
+  const title = document.querySelector("#pennyModalTitle");
+  const lead = document.querySelector("#pennyModalLead");
+  if (title) title.textContent = "More pennies for the well";
+  if (lead) lead.textContent = "Your daily penny gives one complete echo. Copper and moon pennies each unlock a different premium experience.";
+}
+
+function beginFollowUp(coin) {
+  if (!runtime.followUpDraft || !runtime.currentRecord) return;
+  const question = String(elements.followUpInput.value || runtime.followUpDraft.question || "").replace(/\s+/g, " ").trim().slice(0, 320);
+  if (question.length < 4) {
+    showToast("Ask the well one clear follow-up question.");
+    elements.followUpInput.focus();
+    return;
+  }
+  const draft = {
+    ...runtime.followUpDraft,
+    question,
+    coin
+  };
+  runtime.followUpDraft = draft;
+  if (coinBalance(coin) < 1) {
+    state.pendingFollowUp = draft;
+    saveState();
+    closeOverlay(elements.followUpModal);
+    purchaseContextForFollowUp(coin);
+    openOverlay(elements.pennyModal);
+    trackEvent("follow_up_purchase_needed", { coin, direction: draft.direction });
+    return;
+  }
+
+  state.pendingFollowUp = null;
+  saveState();
+  runtime.followUpContext = {
+    parentId: draft.parentId,
+    parentCloudId: draft.parentCloudId,
+    originalWish: draft.originalWish,
+    originalAnswer: draft.originalAnswer,
+    originalMeaning: draft.originalMeaning,
+    question: draft.question,
+    direction: draft.direction
+  };
+  runtime.currentWish = draft.originalWish;
+  runtime.pendingCoinSource = coin;
+  closeOverlay(elements.followUpModal);
+  elements.responseCard.hidden = true;
+  elements.upgradeOffer.hidden = true;
+  elements.wishComposer.hidden = true;
+  elements.introCopy.hidden = true;
+  elements.coinDock.hidden = false;
+  elements.coinInstruction.textContent = coin === "moon"
+    ? "Throw the Moon penny to continue this wish"
+    : "Throw the Copper penny to continue this wish";
+  setCoinVisual(coin);
+  renderCoinChoices({ forceCollapsed: true });
+  trackEvent("paid_follow_up_ready", { coin, direction: draft.direction });
+  setTimeout(() => elements.coinDock.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+}
+
+function resumePendingFollowUp(deliveredCoin = null) {
+  const pending = state.pendingFollowUp;
+  if (!pending) return false;
+  const coin = pending.coin || deliveredCoin;
+  if (coin && coinBalance(coin) < 1) return false;
+  const parent = state.wishes.find(record => record.id === pending.parentId);
+  if (!parent) {
+    state.pendingFollowUp = null;
+    saveState();
+    return false;
+  }
+  runtime.currentRecord = parent;
+  runtime.followUpDraft = { ...pending };
+  showResponse(parent);
+  setTimeout(() => openFollowUp({ resume: true }), 180);
+  return true;
+}
+
 async function startCheckout(pack) {
-  trackEvent("checkout_started", { pack, source: runtime.currentRecord ? "response" : "penny_menu" });
+  const purchaseCoin = pack === "moon_30" || pack === "keeper_monthly" ? "moon" : pack === "copper_10" ? "copper" : null;
+  if (state.pendingFollowUp && purchaseCoin) {
+    state.pendingFollowUp.coin = purchaseCoin;
+    saveState();
+  }
+  trackEvent("checkout_started", { pack, source: state.pendingFollowUp ? "follow_up" : runtime.currentRecord ? "response" : "penny_menu" });
   if (!runtime.config.payments) {
     elements.paymentNote.textContent = "The payment flow is built and waiting for Stripe price IDs and a secret key.";
     showToast("Payments are ready for Stripe keys, but not connected yet.");
@@ -1130,12 +1364,20 @@ async function syncCloudState() {
         if (likelyMatch) {
           likelyMatch.cloudId = cloud.id;
           likelyMatch.sealedUntil = cloud.sealed_until || likelyMatch.sealedUntil;
+          likelyMatch.responseKind = cloud.response_kind || likelyMatch.responseKind || "wish";
+          likelyMatch.parentCloudId = cloud.parent_wish_id || likelyMatch.parentCloudId || null;
+          likelyMatch.followUpPrompt = cloud.follow_up_prompt || likelyMatch.followUpPrompt || null;
+          likelyMatch.followUpDirection = cloud.follow_up_direction || likelyMatch.followUpDirection || null;
           continue;
         }
         state.wishes.push({
           id: createId(),
           cloudId: cloud.id,
           wish: cloud.wish_text,
+          responseKind: cloud.response_kind || "wish",
+          parentCloudId: cloud.parent_wish_id || null,
+          followUpPrompt: cloud.follow_up_prompt || null,
+          followUpDirection: cloud.follow_up_direction || null,
           response: {
             answer: cloud.answer,
             meaning: cloud.meaning,
@@ -1212,6 +1454,9 @@ function exportJournal() {
     app: SHARE_NAME,
     wishes: state.wishes.map(record => ({
       wish: record.wish,
+      responseKind: record.responseKind || "wish",
+      followUpPrompt: record.followUpPrompt || null,
+      followUpDirection: record.followUpDirection || null,
       response: record.response,
       createdAt: record.createdAt,
       sealedUntil: record.sealedUntil,
@@ -1269,6 +1514,7 @@ async function confirmPurchasedCredits(startingWallet, expectedCoin = null) {
       const added = Math.max(moonAdded, copperAdded);
       trackEvent("credits_delivered", { added, coin: deliveredCoin, expectedCoin });
       showToast(`${added} ${deliveredCoin} pennies are ready.`, 3800);
+      resumePendingFollowUp(deliveredCoin);
       return true;
     }
   }
@@ -1289,8 +1535,10 @@ function handlePaymentReturn() {
     showToast(`Stripe is confirming your ${expectedCoin || "purchased"} pennies.`, 3800);
     confirmPurchasedCredits(startingWallet, expectedCoin);
   } else if (payment === "cancelled") {
-    trackEvent("checkout_cancelled");
-    showToast("Nothing was charged. Your available pennies are still here.");
+    trackEvent("checkout_cancelled", { source: state.pendingFollowUp ? "follow_up" : "wallet" });
+    showToast(state.pendingFollowUp
+      ? "Nothing was charged. Your follow-up is still waiting when you are ready."
+      : "Nothing was charged. Your available pennies are still here.");
   }
 }
 
@@ -1299,7 +1547,7 @@ function registerPWA() {
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     runtime.installPrompt = event;
-    elements.installButton.hidden = false;
+    elements.installButton.hidden = state.wishes.length < 1;
   });
   elements.installButton.addEventListener("click", async () => {
     if (!runtime.installPrompt) return;
@@ -1321,11 +1569,18 @@ function bindEvents() {
   });
   elements.readyButton.addEventListener("click", preparePenny);
   elements.editWishButton.addEventListener("click", editWish);
+  elements.coinChoiceToggle.addEventListener("click", () => {
+    runtime.coinChoicesExpanded = !runtime.coinChoicesExpanded;
+    renderCoinChoices();
+    trackEvent("coin_choices_toggled", { expanded: runtime.coinChoicesExpanded });
+  });
   for (const button of elements.coinChoiceButtons) {
     button.addEventListener("click", () => {
       const source = button.dataset.coinChoice;
       if (coinBalance(source) < 1) return;
       setCoinVisual(source);
+      runtime.coinChoicesExpanded = false;
+      renderCoinChoices();
       trackEvent("coin_selected", { coin: source });
     });
   }
@@ -1371,13 +1626,29 @@ function bindEvents() {
   elements.shareButton.addEventListener("click", openShare);
   elements.journalButton.addEventListener("click", openJournal);
   elements.pennyButton.addEventListener("click", () => {
+    resetPurchaseContext();
     trackEvent("penny_wallet_opened", { source: "header" });
     openOverlay(elements.pennyModal);
   });
-  elements.upgradeButton.addEventListener("click", () => {
-    trackEvent("upgrade_offer_clicked", { theme: runtime.currentRecord?.response?.theme || "unknown" });
-    openOverlay(elements.pennyModal);
+  elements.upgradeButton.addEventListener("click", () => openFollowUp());
+  for (const button of elements.followDirectionButtons) {
+    button.addEventListener("click", () => {
+      const direction = button.dataset.followDirection;
+      const question = button.dataset.followQuestion || (direction === "custom" ? "" : elements.followUpInput.value);
+      setFollowUpDirection(direction, question);
+      trackEvent("follow_up_direction_selected", { direction });
+    });
+  }
+  elements.followUpInput.addEventListener("input", () => {
+    if (!runtime.followUpDraft) return;
+    runtime.followUpDraft.question = elements.followUpInput.value;
+    if (runtime.followUpDraft.direction !== "custom") {
+      runtime.followUpDraft.direction = "custom";
+      for (const button of elements.followDirectionButtons) button.classList.toggle("selected", button.dataset.followDirection === "custom");
+    }
   });
+  elements.continueCopperButton.addEventListener("click", () => beginFollowUp("copper"));
+  elements.continueMoonButton.addEventListener("click", () => beginFollowUp("moon"));
   elements.giftFromResponseButton.addEventListener("click", shareGiftPenny);
   elements.giftButton.addEventListener("click", shareGiftPenny);
   elements.monthlyButton.addEventListener("click", createMonthlyReflection);
@@ -1404,11 +1675,22 @@ function bindEvents() {
     if (runtime.returnedWish) openSavedWish(runtime.returnedWish, { revisit: true });
   });
 
+  elements.responseInsight.addEventListener("toggle", () => {
+    if (elements.responseInsight.open) trackEvent("response_meaning_opened", { coin: runtime.currentRecord?.coinSource || "unknown" });
+  });
+  elements.responseMore.addEventListener("toggle", () => {
+    if (elements.responseMore.open) trackEvent("response_more_opened", { coin: runtime.currentRecord?.coinSource || "unknown" });
+  });
+
   $$(".legal-links a").forEach(link => link.addEventListener("click", () => {
     trackEvent("legal_link_clicked", { page: link.getAttribute("href") || "unknown" });
   }));
   $$('[data-close-drawer]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.journalDrawer)));
-  $$('[data-close-modal]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.pennyModal)));
+  $$('[data-close-modal]').forEach(node => node.addEventListener("click", () => {
+    closeOverlay(elements.pennyModal);
+    resetPurchaseContext();
+  }));
+  $$('[data-close-followup]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.followUpModal)));
   $$('[data-close-seal]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.sealModal)));
   $$('[data-close-share]').forEach(node => node.addEventListener("click", () => closeOverlay(elements.shareModal)));
   $$("[data-days]").forEach(button => button.addEventListener("click", () => sealCurrentWish(button.dataset.days)));
@@ -1426,8 +1708,9 @@ async function init() {
   bindEvents();
   updateUI();
   registerPWA();
-  handlePaymentReturn();
   await loadConfig();
+  handlePaymentReturn();
+  if (!new URLSearchParams(window.location.search).get("payment")) resumePendingFollowUp();
 }
 
 init();

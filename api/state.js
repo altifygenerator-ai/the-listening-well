@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     await rpc("touch_well_profile", { p_session_id: sessionId });
     const [profiles, wishes, monthlyReflections] = await Promise.all([
       supabaseRequest(`well_profiles?session_id=eq.${sessionId}&select=session_id,copper_credits,moon_credits,subscription_active,daily_claim_date,total_wishes,created_at,last_seen`, { method: "GET" }),
-      supabaseRequest(`wishes?session_id=eq.${sessionId}&select=id,wish_text,answer,meaning,next_step,share_line,follow_up_question,mood,theme,coin_source,safety,sealed_until,created_at&order=created_at.desc&limit=100`, { method: "GET" }),
+      supabaseRequest(`wishes?session_id=eq.${sessionId}&select=*&order=created_at.desc&limit=100`, { method: "GET" }),
       supabaseRequest(`monthly_reflections?session_id=eq.${sessionId}&select=id,month_key,answer,meaning,next_step,share_line,follow_up_question,mood,theme,created_at&order=created_at.desc&limit=36`, { method: "GET" })
     ]);
     return jsonResponse(res, 200, { connected: true, profile: profiles?.[0] || null, wishes: wishes || [], monthlyReflections: monthlyReflections || [] });

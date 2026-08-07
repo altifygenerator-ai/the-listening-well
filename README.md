@@ -106,3 +106,7 @@ WEBHOOK_ADMIN_SETUP.md                   Exact setup and testing guide
 - Decide and document wish retention and deletion periods.
 - Test on low-power Android phones, iPhone Safari, reduced-motion mode, VoiceOver, and TalkBack.
 - Keep Supabase secret keys, Stripe secret keys, webhook secrets, OpenAI keys, and the admin setup token out of Git and browser code.
+
+## Simplified paid continuation flow
+
+The free daily wish remains complete. After a response, Copper and Moon pennies can now continue that same wish through a guided follow-up echo. See `SIMPLIFICATION_FOLLOWUP_UPDATE.md` and run `supabase/migrations/20260806_follow_up_echoes.sql` to preserve full parent/follow-up metadata in Supabase. The server remains backward-compatible with the previous wish table while the migration is pending.

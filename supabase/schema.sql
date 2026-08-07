@@ -32,6 +32,10 @@ create table if not exists public.wishes (
   theme text not null default 'uncertainty',
   coin_source text not null default 'daily' check (coin_source in ('daily','copper','moon','safety','local')),
   safety text,
+  response_kind text not null default 'wish' check (response_kind in ('wish','follow_up')),
+  parent_wish_id uuid references public.wishes(id) on delete set null,
+  follow_up_prompt text,
+  follow_up_direction text check (follow_up_direction is null or follow_up_direction in ('clarity','action','release','custom')),
   sealed_until timestamptz,
   created_at timestamptz not null default now()
 );
@@ -41,6 +45,10 @@ create index if not exists wishes_session_created_idx
 
 create index if not exists wishes_coin_created_idx
   on public.wishes(coin_source, created_at desc);
+
+create index if not exists wishes_parent_idx
+  on public.wishes(parent_wish_id, created_at asc)
+  where parent_wish_id is not null;
 
 create table if not exists public.monthly_reflections (
   id uuid primary key default gen_random_uuid(),
