@@ -110,3 +110,8 @@ WEBHOOK_ADMIN_SETUP.md                   Exact setup and testing guide
 ## Simplified paid continuation flow
 
 The free daily wish remains complete. After a response, Copper and Moon pennies can now continue that same wish through a guided follow-up echo. See `SIMPLIFICATION_FOLLOWUP_UPDATE.md` and run `supabase/migrations/20260806_follow_up_echoes.sql` to preserve full parent/follow-up metadata in Supabase. The server remains backward-compatible with the previous wish table while the migration is pending.
+
+
+## v1.5 response-quality and conversion pass
+
+See `RESPONSE_QUALITY_CONVERSION_UPDATE.md` for the free clarification flow, automatic AI quality gate, production fallback protection, and simplified first-visit UI.

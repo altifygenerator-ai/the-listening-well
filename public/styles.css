@@ -748,3 +748,96 @@ body.locked { overflow:hidden; }
   .response-card { padding-left: 17px; padding-right: 17px; }
   .intro-copy h1 { font-size: clamp(35px, 9.5vw, 48px); }
 }
+
+/* 2026-08 conversion + clarity pass */
+.first-visit .top-actions {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-5px);
+}
+.top-actions { transition: opacity .3s ease, transform .3s ease; }
+.first-visit .cloud-two { display: none; }
+.first-visit .garden { opacity: .25; }
+
+.wish-nudge {
+  margin: 9px 4px 0;
+  color: #d9c58c;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.response-card {
+  border-radius: 25px;
+  padding-top: 21px;
+  background: rgba(8, 24, 17, .91);
+}
+.response-card blockquote {
+  max-width: 560px;
+  font-size: clamp(18px, 4.8vw, 25px);
+  line-height: 1.42;
+  letter-spacing: -.01em;
+}
+.response-divider { margin: 17px 0; }
+.response-mark {
+  width: 39px;
+  height: 39px;
+  margin-bottom: 10px;
+  font-size: 26px;
+}
+.carry-card {
+  padding: 13px 14px;
+  background: rgba(220,198,132,.055);
+}
+.upgrade-offer {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 19px;
+  background: rgba(216,187,111,.065);
+}
+.upgrade-glow { opacity: .55; }
+.upgrade-offer h3 { font-size: 19px; }
+.upgrade-offer > p:not(.eyebrow) { font-size: 11px; }
+.compact-actions { margin-top: 10px; }
+.quiet-action { background: transparent; }
+
+.free-follow-up-action {
+  margin-top: 13px;
+}
+.free-follow-up-action > small {
+  display: block;
+  margin-top: 8px;
+  color: #7f9287;
+  font-size: 9px;
+}
+.premium-follow-up-actions { margin-top: 11px; }
+.premium-follow-up-actions[hidden], .free-follow-up-action[hidden] { display: none !important; }
+
+.follow-up-card { padding-top: 24px; }
+.follow-up-card h2 { font-size: 26px; }
+.follow-up-echo {
+  margin: 9px auto 13px;
+  padding: 9px 12px;
+  border-left-color: rgba(215,188,120,.32);
+  background: rgba(255,255,255,.012);
+  color: #aebbb2;
+  font-size: 12px;
+}
+.follow-up-directions { gap: 7px; margin-bottom: 9px; }
+.follow-up-directions button { min-height: 40px; border-radius: 12px; font-size: 10px; }
+#followUpInput { min-height: 78px; font-size: 13px; }
+.follow-up-coin-actions button { min-height: 49px; }
+
+.price-card { border-radius: 15px; }
+.purchase-trust { opacity: .76; }
+
+@media (max-width: 520px) {
+  .sky-scene { padding-left: 14px; padding-right: 14px; }
+  .wish-composer { border-radius: 23px; padding: 16px; }
+  .composer-heading h2 { font-size: 18px; }
+  .privacy-mark { font-size: 9px; }
+  .response-actions { gap: 7px; }
+  .modal-card { border-radius: 23px 23px 0 0; }
+}
+.free-follow-up-action .full-width { width: 100%; }
+@media (max-width: 520px) { .modal-card { border-radius: 23px; } }

@@ -46,13 +46,28 @@ function isViolence(categories = {}) {
 }
 
 function normalizeCoinIntent(value) {
-  return ["daily", "copper", "moon"].includes(value) ? value : "daily";
+  return ["daily", "copper", "moon", "free"].includes(value) ? value : "daily";
 }
 
 function responseDepth(coinSource) {
   if (coinSource === "moon") return "moon";
   if (coinSource === "copper") return "deep";
+  if (coinSource === "free") return "clarify";
   return "standard";
+}
+
+async function freeFollowUpAvailable({ sessionId, parentCloudId }) {
+  if (!uuidLike(parentCloudId)) return { allowed: false, reason: "missing_parent" };
+  const parentRows = await supabaseRequest(
+    `wishes?id=eq.${parentCloudId}&session_id=eq.${sessionId}&select=id&limit=1`,
+    { method: "GET" }
+  );
+  if (!Array.isArray(parentRows) || !parentRows.length) return { allowed: false, reason: "parent_not_found" };
+  const usedRows = await supabaseRequest(
+    `wishes?session_id=eq.${sessionId}&parent_wish_id=eq.${parentCloudId}&response_kind=eq.follow_up&coin_source=eq.local&select=id&limit=1`,
+    { method: "GET" }
+  );
+  return { allowed: !Array.isArray(usedRows) || usedRows.length === 0, reason: "already_used" };
 }
 
 async function persistWish({ sessionId, wish, response, coinSource, followUp = null }) {
@@ -116,7 +131,7 @@ export default async function handler(req, res) {
 
     if (!wish || wish.length < 3) return jsonResponse(res, 400, { error: "Please give the well a little more to listen to." });
     if (followUp && followUp.question.length < 4) return jsonResponse(res, 400, { error: "Ask the well one clear follow-up question." });
-    if (followUp && coinIntent === "daily") return jsonResponse(res, 400, { error: "Follow-up echoes require a Copper or Moon penny." });
+    if (followUp && coinIntent === "daily") return jsonResponse(res, 400, { error: "Follow-up echoes use the free clarification, a Copper penny, or a Moon penny." });
     if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "Invalid session" });
     if (!rateAllowed(req, sessionId)) {
       res.setHeader("Retry-After", "3600");
@@ -140,9 +155,29 @@ Follow-up: ${followUp.question}` : wish;
       }
     }
 
+    if (!response && !process.env.OPENAI_API_KEY && process.env.VERCEL) {
+      return jsonResponse(res, 503, {
+        error: "The well is temporarily quiet. Your penny was not used.",
+        code: "AI_UNAVAILABLE"
+      });
+    }
+
     let coinSource = response?.safety ? "safety" : "local";
     const databaseReady = process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
-    if (!response?.safety && databaseReady) {
+    const freeFollowUp = Boolean(followUp && coinIntent === "free");
+
+    if (!response?.safety && freeFollowUp && databaseReady) {
+      const availability = await freeFollowUpAvailable({ sessionId, parentCloudId: followUp.parentCloudId });
+      if (!availability.allowed) {
+        return jsonResponse(res, 409, {
+          error: availability.reason === "already_used"
+            ? "This wish has already used its free follow-up."
+            : "The original wish could not be verified for a free follow-up.",
+          code: availability.reason === "already_used" ? "FREE_FOLLOW_UP_USED" : "FREE_FOLLOW_UP_UNAVAILABLE"
+        });
+      }
+      coinSource = "local";
+    } else if (!response?.safety && databaseReady) {
       const consumed = await rpc("consume_well_coin", {
         p_session_id: sessionId,
         p_coin_intent: coinIntent
@@ -157,11 +192,11 @@ Follow-up: ${followUp.question}` : wish;
       refundableCoin = coinSource;
       refundableSessionId = sessionId;
     } else if (!response?.safety) {
-      coinSource = coinIntent;
+      coinSource = freeFollowUp ? "free" : coinIntent;
     }
 
     if (!response) {
-      const depth = responseDepth(coinSource);
+      const depth = freeFollowUp ? "clarify" : responseDepth(coinSource);
       try {
         response = process.env.OPENAI_API_KEY
           ? await generateOpenAIWish({
@@ -176,7 +211,8 @@ Follow-up: ${followUp.question}` : wish;
             })
           : localWishResponse(wish, { depth });
       } catch (error) {
-        console.error("AI fallback:", error);
+        console.error("AI response unavailable:", error);
+        if (process.env.OPENAI_API_KEY) throw error;
         response = localWishResponse(wish, { depth });
       }
     }
@@ -185,7 +221,13 @@ Follow-up: ${followUp.question}` : wish;
     if (!response.safety) wishId = await persistWish({ sessionId, wish, response, coinSource, followUp });
     refundableCoin = null;
 
-    return jsonResponse(res, 200, { ...response, coinSource, wishId, responseKind: followUp ? "follow_up" : "wish" });
+    return jsonResponse(res, 200, {
+      ...response,
+      coinSource: freeFollowUp ? "free" : coinSource,
+      wishId,
+      responseKind: followUp ? "follow_up" : "wish",
+      followUpTier: freeFollowUp ? "free" : followUp ? "paid" : null
+    });
   } catch (error) {
     console.error(error);
     if (refundableCoin && refundableSessionId) {

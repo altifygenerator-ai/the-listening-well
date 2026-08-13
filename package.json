@@ -1,6 +1,6 @@
 {
   "name": "the-listening-well",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "description": "A simplified mobile-first AI wishing well with progressive disclosure, personal follow-up echoes, daily/copper/moon experiences, Supabase storage, Stripe payments, Vercel Analytics, and a secure admin panel.",

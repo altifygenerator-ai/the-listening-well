@@ -93,9 +93,22 @@ async function commerceAudit() {
 async function openAIAudit() {
   const { generateOpenAIWish } = await import("../lib/well-core.js");
   const originalFetch = globalThis.fetch;
-  let payload = null;
+  const payloads = [];
   globalThis.fetch = async (_url, options) => {
-    payload = JSON.parse(options.body);
+    const payload = JSON.parse(options.body);
+    payloads.push(payload);
+    if (payload?.text?.format?.name === "well_quality") {
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          specificity: 5,
+          directness: 5,
+          grounding: 5,
+          genericRisk: false,
+          inventedDetails: false,
+          critique: "Strong and specific."
+        })
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     return new Response(JSON.stringify({
       output_text: JSON.stringify({
         answer: "A moon answer.", meaning: "A useful meaning.", nextStep: "Take one step.",
@@ -105,14 +118,16 @@ async function openAIAudit() {
   };
   try {
     const result = await generateOpenAIWish({ wish: "I wish for change", apiKey: "test", depth: "moon", safetyIdentifier: "session" });
-    assert.equal(result.source, "openai-moon");
-    assert.match(payload.input, /RESPONSE MODE: MOON WATER/);
-    assert.equal(payload.text.format.type, "json_schema");
-    assert.equal(payload.text.format.strict, true);
-    assert.equal(payload.store, false);
-    assert.ok(payload.safety_identifier);
+    assert.equal(result.source, "openai-moon-reviewed");
+    const moonPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
+    assert.match(moonPayload.input, /RESPONSE MODE: MOON WATER/);
+    assert.equal(moonPayload.text.format.type, "json_schema");
+    assert.equal(moonPayload.text.format.strict, true);
+    assert.equal(moonPayload.store, false);
+    assert.ok(moonPayload.safety_identifier);
+    assert.ok(payloads.some(payload => payload?.text?.format?.name === "well_quality"), "Quality review was not requested");
 
-    payload = null;
+    payloads.length = 0;
     const followUpResult = await generateOpenAIWish({
       wish: "I wish I could make my business dependable",
       apiKey: "test",
@@ -126,11 +141,145 @@ async function openAIAudit() {
         originalMeaning: "You want stability more than novelty."
       }
     });
-    assert.equal(followUpResult.source, "openai-deep-follow-up");
-    assert.match(payload.input, /CONVERSATION TYPE: FOLLOW-UP/);
-    assert.match(payload.input, /FOLLOW-UP DIRECTION: ACTION/);
-    assert.match(payload.input, /What should I do first\?/);
-    assert.match(payload.input, /RECENT PRIVATE CONTEXT/);
+    assert.equal(followUpResult.source, "openai-deep-follow-up-reviewed");
+    const followPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
+    assert.match(followPayload.input, /CONVERSATION TYPE: FOLLOW-UP/);
+    assert.match(followPayload.input, /FOLLOW-UP DIRECTION: ACTION/);
+    assert.match(followPayload.input, /What should I do first\?/);
+    assert.match(followPayload.input, /RECENT PRIVATE CONTEXT/);
+
+    payloads.length = 0;
+    const freeResult = await generateOpenAIWish({
+      wish: "I wish my sister and I could talk without every conversation becoming an argument",
+      apiKey: "test",
+      depth: "clarify",
+      safetyIdentifier: "session",
+      followUp: {
+        direction: "clarity",
+        question: "What am I overlooking here?",
+        originalAnswer: "The conflict matters because the relationship matters.",
+        originalMeaning: "You want a different pattern, not simply to win an argument."
+      }
+    });
+    assert.equal(freeResult.source, "openai-clarify-follow-up-reviewed");
+    const freePayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
+    assert.match(freePayload.input, /RESPONSE MODE: FREE CLARIFICATION/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function qualityRetryAudit() {
+  const { generateOpenAIWish } = await import("../lib/well-core.js");
+  const originalFetch = globalThis.fetch;
+  let responseCalls = 0;
+  let qualityCalls = 0;
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    if (payload?.text?.format?.name === "well_quality") {
+      qualityCalls += 1;
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          specificity: 2,
+          directness: 3,
+          grounding: 2,
+          genericRisk: true,
+          inventedDetails: false,
+          critique: "The answer could fit almost any work wish. Address the stated customer problem and dependable-income goal directly."
+        })
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    responseCalls += 1;
+    const corrected = responseCalls > 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        answer: corrected
+          ? "You are not asking for abstract success; you want enough repeat customers that the business stops feeling unpredictable month to month."
+          : "Trust the journey and keep moving forward.",
+        meaning: corrected
+          ? "The wish is about dependable demand more than a single big sale."
+          : "Your path may be asking you to believe in yourself.",
+        nextStep: corrected
+          ? "Identify the service that produced the most repeat or referral work and contact three past customers connected to it."
+          : "Take a small step.",
+        shareLine: "Steady progress can matter more than one dramatic breakthrough.",
+        followUpQuestion: "Which source of work has been the most repeatable so far?",
+        mood: "steady",
+        theme: "work"
+      })
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const result = await generateOpenAIWish({
+      wish: "I wish my business had enough repeat customers that I could count on steady income every month",
+      apiKey: "test",
+      model: "gpt-5"
+    });
+    assert.equal(responseCalls, 2, "A failed quality review did not trigger one regeneration");
+    assert.equal(qualityCalls, 1);
+    assert.match(result.answer, /repeat customers/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function freeFollowUpAudit() {
+  process.env.SUPABASE_URL = "https://project.supabase.co";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+  delete process.env.OPENAI_API_KEY;
+  const { default: handler } = await import("../api/wish.js");
+  const originalFetch = globalThis.fetch;
+  const sessionId = "33333333-3333-4333-8333-333333333333";
+  const parentId = "44444444-4444-4444-8444-444444444444";
+  const seen = [];
+  let alreadyUsed = false;
+
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    seen.push({ url: value, method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
+    if (value.includes("/rest/v1/wishes?id=eq.") && (options.method || "GET") === "GET") {
+      return new Response(JSON.stringify([{ id: parentId }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.includes("parent_wish_id=eq.") && (options.method || "GET") === "GET") {
+      return new Response(JSON.stringify(alreadyUsed ? [{ id: "55555555-5555-4555-8555-555555555555" }] : []), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.endsWith("/rest/v1/rpc/touch_well_profile")) {
+      return new Response(JSON.stringify([{ session_id: sessionId }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.endsWith("/rest/v1/wishes") && options.method === "POST") {
+      return new Response(JSON.stringify([{ id: "66666666-6666-4666-8666-666666666666" }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected fetch in free follow-up test: ${value}`);
+  };
+
+  const body = {
+    sessionId,
+    wish: "I wish my sister and I could talk without every conversation becoming an argument",
+    coinIntent: "free",
+    followUp: {
+      parentCloudId: parentId,
+      originalAnswer: "You want the pattern between you to change.",
+      originalMeaning: "The relationship matters enough that the repeated arguments are wearing on you.",
+      question: "What am I overlooking here?",
+      direction: "clarity"
+    }
+  };
+
+  try {
+    const res = responseRecorder();
+    await handler(request({ method: "POST", body }), res);
+    assert.equal(res.statusCode, 200, res.body);
+    const data = res.json();
+    assert.equal(data.coinSource, "free");
+    assert.equal(data.followUpTier, "free");
+    assert.equal(data.responseKind, "follow_up");
+    assert.ok(!seen.some(call => call.url.includes("/rpc/consume_well_coin")), "Free follow-up consumed a paid/daily coin");
+
+    alreadyUsed = true;
+    const duplicate = responseRecorder();
+    await handler(request({ method: "POST", body }), duplicate);
+    assert.equal(duplicate.statusCode, 409, duplicate.body);
+    assert.equal(duplicate.json().code, "FREE_FOLLOW_UP_USED");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -352,6 +501,8 @@ results.syntaxFiles = await syntaxCheck();
 results.dom = await staticAudit();
 await commerceAudit();
 await openAIAudit();
+await qualityRetryAudit();
+await freeFollowUpAudit();
 await checkoutAudit();
 await stripeCatalogAudit();
 await webhookAudit();
