@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import configHandler from "./api/config.js";
 import wishHandler from "./api/wish.js";
+import wishCheckHandler from "./api/wish-check.js";
 import stateHandler from "./api/state.js";
 import sealHandler from "./api/seal.js";
 import checkoutHandler from "./api/checkout.js";
@@ -25,6 +26,7 @@ const port = Number(process.env.PORT || 3000);
 const apiRoutes = new Map([
   ["/api/config", configHandler],
   ["/api/wish", wishHandler],
+  ["/api/wish-check", wishCheckHandler],
   ["/api/state", stateHandler],
   ["/api/seal", sealHandler],
   ["/api/checkout", checkoutHandler],

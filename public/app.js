@@ -1,5 +1,5 @@
 const STORAGE_KEY = "listening-well-state-v1";
-const SHARE_NAME = "The Listening Well";
+const SHARE_NAME = "Throw a Penny";
 const TOSS_DURATION_MS = 2150;
 const SPLASH_TRIGGER_MS = 1810;
 const MIN_RITUAL_DURATION_MS = 3500;
@@ -52,6 +52,11 @@ const elements = {
   appShell: $("#appShell"),
   wishInput: $("#wishInput"),
   wishNudge: $("#wishNudge"),
+  wishClarifier: $("#wishClarifier"),
+  wishClarifierQuestion: $("#wishClarifierQuestion"),
+  wishClarifierInput: $("#wishClarifierInput"),
+  clarifierButton: $("#clarifierButton"),
+  clarifierSkipButton: $("#clarifierSkipButton"),
   characterCount: $("#characterCount"),
   readyButton: $("#readyButton"),
   wishComposer: $("#wishComposer"),
@@ -74,12 +79,17 @@ const elements = {
   responseInsight: $("#responseInsight"),
   responseMore: $("#responseMore"),
   nextStepText: $("#nextStepText"),
+  moonNoteCard: $("#moonNoteCard"),
+  moonNoteText: $("#moonNoteText"),
   responseModeLabel: $("#responseModeLabel"),
   upgradeOffer: $("#upgradeOffer"),
   upgradeEyebrow: $("#upgradeEyebrow"),
   upgradeTitle: $("#upgradeTitle"),
   upgradeText: $("#upgradeText"),
   upgradeButton: $("#upgradeButton"),
+  premiumUpgradeActions: $("#premiumUpgradeActions"),
+  upgradeCopperButton: $("#upgradeCopperButton"),
+  upgradeMoonButton: $("#upgradeMoonButton"),
   giftFromResponseButton: $("#giftFromResponseButton"),
   followUpModal: $("#followUpModal"),
   followUpKicker: $("#followUpKicker"),
@@ -262,6 +272,10 @@ function hasFreeFollowUp(record) {
   );
 }
 
+function hasAnyFreeFollowUp() {
+  return state.wishes.some(item => isFreeFollowUpRecord(item));
+}
+
 function freeFollowUpAvailable(record) {
   return Boolean(
     record
@@ -269,7 +283,7 @@ function freeFollowUpAvailable(record) {
     && record.coinSource === "daily"
     && !record.response?.safety
     && !record.isMonthly
-    && !hasFreeFollowUp(record)
+    && !hasAnyFreeFollowUp()
   );
 }
 
@@ -366,8 +380,8 @@ function updateUI() {
   if (elements.dailyChoiceCount) elements.dailyChoiceCount.textContent = state.dailyAvailable ? "1 ready" : "used today";
   if (elements.copperChoiceCount) elements.copperChoiceCount.textContent = `${Math.max(0, Number(state.copperCredits || 0))} ready`;
   if (elements.moonChoiceCount) elements.moonChoiceCount.textContent = `${Math.max(0, Number(state.moonCredits || 0))} ready`;
-  if (elements.followCopperBalance) elements.followCopperBalance.textContent = state.copperCredits > 0 ? `${state.copperCredits} ready` : "Get Copper pennies";
-  if (elements.followMoonBalance) elements.followMoonBalance.textContent = state.moonCredits > 0 ? `${state.moonCredits} ready` : "Get Moon pennies";
+  if (elements.followCopperBalance) elements.followCopperBalance.textContent = state.copperCredits > 0 ? `${state.copperCredits} ready` : "$2.99 · 10 Copper";
+  if (elements.followMoonBalance) elements.followMoonBalance.textContent = state.moonCredits > 0 ? `${state.moonCredits} ready` : "$4.99 · 30 Moon";
   if (runtime.installPrompt) elements.installButton.hidden = state.wishes.length < 1;
   elements.totalRipples.textContent = String(state.wishes.length);
   elements.daysVisited.textContent = String(state.visitDays.length);
@@ -392,7 +406,7 @@ function updateUI() {
 
 function seedSky() {
   const starFragment = document.createDocumentFragment();
-  for (let i = 0; i < 40; i += 1) {
+  for (let i = 0; i < 28; i += 1) {
     const star = document.createElement("i");
     star.className = "star";
     star.style.left = `${(i * 37 + 11) % 98}%`;
@@ -408,7 +422,7 @@ function seedSky() {
   elements.stars.append(starFragment);
 
   const fireflyFragment = document.createDocumentFragment();
-  for (let i = 0; i < 10; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     const fly = document.createElement("i");
     fly.className = "firefly";
     fly.style.left = `${8 + ((i * 29) % 84)}%`;
@@ -486,6 +500,8 @@ function resetExperience({ preserveText = false } = {}) {
   runtime.currentRecord = null;
   runtime.followUpContext = null;
   runtime.followUpDraft = null;
+  runtime.wishClarification = "";
+  runtime.wishCheckSkipped = false;
   runtime.coinChoicesExpanded = false;
   runtime.currentWish = preserveText ? elements.wishInput.value.trim() : "";
   elements.responseCard.hidden = true;
@@ -510,25 +526,42 @@ function resetExperience({ preserveText = false } = {}) {
     elements.characterCount.textContent = "0 / 600";
   }
   if (elements.wishNudge) elements.wishNudge.hidden = true;
+  if (elements.wishClarifier) elements.wishClarifier.hidden = true;
+  if (elements.wishClarifierInput) elements.wishClarifierInput.value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
   setTimeout(() => elements.wishInput.focus({ preventScroll: true }), 220);
 }
 
-function preparePenny() {
-  const wish = elements.wishInput.value.trim();
-  if (wish.length < 3) {
-    showToast("Give the well a little more to listen to.");
-    elements.wishInput.focus();
-    return;
-  }
-  if (wishNeedsMoreDetail(wish)) {
-    if (elements.wishNudge) elements.wishNudge.hidden = false;
-    trackEvent("wish_detail_nudge_shown", { wordCount: wish.split(/\s+/).filter(Boolean).length });
-    showToast("Give the well one concrete detail so the answer can be about you.");
-    elements.wishInput.focus();
-    return;
-  }
+function showWishClarifier(question, { source = "local" } = {}) {
   if (elements.wishNudge) elements.wishNudge.hidden = true;
+  if (elements.wishClarifierQuestion) elements.wishClarifierQuestion.textContent = question || "What would actually be different if this wish came true?";
+  if (elements.wishClarifier) elements.wishClarifier.hidden = false;
+  if (elements.wishClarifierInput) {
+    elements.wishClarifierInput.value = runtime.wishClarification || "";
+    setTimeout(() => elements.wishClarifierInput.focus(), 80);
+  }
+  trackEvent("wish_clarifier_shown", { source });
+}
+
+async function checkWishReadiness(wish) {
+  if (!runtime.config.ai) {
+    return wishNeedsMoreDetail(wish)
+      ? { ready: false, question: "What would actually be different in your life if this wish came true?", reason: "missing_context" }
+      : { ready: true, question: "", reason: "specific_enough" };
+  }
+  const response = await fetch("/api/wish-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wish, sessionId: state.sessionId })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "The well could not check that wish yet.");
+  return data;
+}
+
+function proceedToPenny(wish) {
+  if (elements.wishNudge) elements.wishNudge.hidden = true;
+  if (elements.wishClarifier) elements.wishClarifier.hidden = true;
   if (!availablePennies()) {
     openOverlay(elements.pennyModal);
     return;
@@ -546,6 +579,73 @@ function preparePenny() {
   elements.introCopy.style.opacity = ".32";
   elements.introCopy.style.transform = "scale(.96)";
   if (navigator.vibrate) navigator.vibrate(18);
+}
+
+async function preparePenny() {
+  const wish = elements.wishInput.value.trim();
+  if (wish.length < 3) {
+    showToast("Give the well a little more to listen to.");
+    elements.wishInput.focus();
+    return;
+  }
+  if (runtime.wishClarification || runtime.wishCheckSkipped) {
+    proceedToPenny(wish);
+    return;
+  }
+
+  // Detailed wishes should move straight into the ritual. The readiness check is
+  // reserved for short/borderline inputs so better personalization does not add
+  // a noticeable extra pause to every visit.
+  const wordCount = wish.replace(/[’']/g, "").split(/\s+/).filter(Boolean).length;
+  if (wordCount > 8 && !wishNeedsMoreDetail(wish)) {
+    trackEvent("wish_readiness_skipped", { reason: "already_specific" });
+    proceedToPenny(wish);
+    return;
+  }
+
+  const originalLabel = elements.readyButton.textContent;
+  elements.readyButton.disabled = true;
+  elements.readyButton.textContent = "Making sure the well has enough…";
+  try {
+    const readiness = await checkWishReadiness(wish);
+    trackEvent("wish_readiness_checked", { ready: Boolean(readiness.ready), reason: readiness.reason || "unknown" });
+    if (!readiness.ready) {
+      showWishClarifier(readiness.question, { source: runtime.config.ai ? "ai" : "local" });
+      return;
+    }
+    proceedToPenny(wish);
+  } catch (error) {
+    // A preflight check should never stop the ritual. The full response still has its own quality gate.
+    console.warn("Wish readiness check unavailable:", error);
+    if (wishNeedsMoreDetail(wish)) {
+      showWishClarifier("What would actually be different in your life if this wish came true?", { source: "fallback" });
+      return;
+    }
+    proceedToPenny(wish);
+  } finally {
+    elements.readyButton.disabled = false;
+    elements.readyButton.textContent = originalLabel;
+  }
+}
+
+function acceptWishClarification() {
+  const detail = String(elements.wishClarifierInput?.value || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (detail.length < 2) {
+    showToast("Give the well one useful detail, or use the wish as written.");
+    elements.wishClarifierInput?.focus();
+    return;
+  }
+  runtime.wishClarification = detail;
+  runtime.wishCheckSkipped = false;
+  trackEvent("wish_clarifier_answered", { lengthBucket: detail.length < 40 ? "short" : "detailed" });
+  proceedToPenny(elements.wishInput.value.trim());
+}
+
+function skipWishClarification() {
+  runtime.wishClarification = "";
+  runtime.wishCheckSkipped = true;
+  trackEvent("wish_clarifier_skipped");
+  proceedToPenny(elements.wishInput.value.trim());
 }
 
 function editWish() {
@@ -751,6 +851,7 @@ async function requestWishResponse(wish, coinIntent, followUp = null) {
       sessionId: state.sessionId,
       wish,
       priorContext: priorContext(followUp?.parentId || null),
+      clarification: followUp ? "" : runtime.wishClarification,
       coinIntent,
       followUp
     })
@@ -819,6 +920,7 @@ async function tossPenny() {
       id: createId(),
       cloudId: response.wishId || null,
       wish: runtime.currentWish,
+      clarification: followUpContext?.originalClarification || runtime.wishClarification || "",
       responseKind: followUpContext ? "follow_up" : "wish",
       parentId: followUpContext?.parentId || null,
       parentCloudId: followUpContext?.parentCloudId || null,
@@ -831,6 +933,7 @@ async function tossPenny() {
         nextStep: response.nextStep,
         shareLine: response.shareLine,
         followUpQuestion: response.followUpQuestion,
+        moonNote: response.moonNote || null,
         mood: response.mood,
         theme: response.theme || "uncertainty",
         safety: response.safety || null,
@@ -878,6 +981,8 @@ function showResponse(record) {
   elements.answerText.textContent = record.response.answer;
   elements.meaningText.textContent = record.response.meaning;
   elements.nextStepText.textContent = record.response.nextStep;
+  if (elements.moonNoteText) elements.moonNoteText.textContent = record.response.moonNote || "";
+  if (elements.moonNoteCard) elements.moonNoteCard.hidden = !(isMoon && record.response.moonNote);
   elements.responseModeLabel.textContent = isFreeContinuation
     ? "A clearer echo"
     : isFollowUp
@@ -907,21 +1012,25 @@ function showResponse(record) {
 
   const canUseFreeFollowUp = freeFollowUpAvailable(record);
   const rootFreeAlreadyUsed = record.responseKind !== "follow_up" && record.coinSource === "daily" && hasFreeFollowUp(record);
-  const showPremiumContinuation = isFreeContinuation || rootFreeAlreadyUsed;
+  const freeProofUsed = hasAnyFreeFollowUp();
+  const showPremiumContinuation = isFreeContinuation || rootFreeAlreadyUsed || (!isFollowUp && record.coinSource === "daily" && freeProofUsed);
   const showUpgrade = !record.isMonthly && !safetyResponse && !isPremium && (canUseFreeFollowUp || showPremiumContinuation);
   elements.upgradeOffer.hidden = !showUpgrade;
 
+  if (elements.premiumUpgradeActions) elements.premiumUpgradeActions.hidden = true;
+  if (elements.upgradeButton) elements.upgradeButton.hidden = false;
   if (showUpgrade && canUseFreeFollowUp) {
-    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "One more ripple";
-    elements.upgradeTitle.textContent = "Ask one follow-up free";
-    elements.upgradeText.textContent = "Test whether the well really understood this wish. One follow-up is free and stays in the same conversation.";
-    elements.upgradeButton.textContent = "Ask one free follow-up";
+    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "Prove it understood you";
+    elements.upgradeTitle.textContent = "Your first follow-up is free";
+    elements.upgradeText.textContent = "Ask the question that came up while reading this. The well keeps the same wish and answer in context.";
+    elements.upgradeButton.textContent = "Ask my free follow-up";
     trackEvent("free_follow_up_offer_viewed", { theme: record.response.theme, firstWish: state.wishes.length <= 1 });
   } else if (showUpgrade) {
-    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "Keep this wish going";
-    elements.upgradeTitle.textContent = "There may be more beneath it";
-    elements.upgradeText.textContent = "Copper gives practical clarity. Moon adds a deeper perspective shift. Both continue the wish you already started.";
-    elements.upgradeButton.textContent = "Continue with Copper or Moon";
+    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "Stay with this wish";
+    elements.upgradeTitle.textContent = "What would actually help next?";
+    elements.upgradeText.textContent = "Copper is for a practical next move. Moon is for the wish you want to look at from another angle.";
+    elements.upgradeButton.hidden = true;
+    if (elements.premiumUpgradeActions) elements.premiumUpgradeActions.hidden = false;
     trackEvent("premium_follow_up_offer_viewed", { theme: record.response.theme, source: isFreeContinuation ? "free_follow_up" : "saved_wish" });
   }
 
@@ -1135,7 +1244,7 @@ function renderShareCard(record) {
 
   ctx.fillStyle = "#d7bc78";
   ctx.font = "34px Georgia";
-  ctx.fillText("The Listening Well", width / 2, 1300);
+  ctx.fillText("Throw a Penny", width / 2, 1300);
   ctx.fillStyle = "#99aa9f";
   ctx.font = "19px Arial";
   ctx.fillText(isMoon ? "A moon penny. A longer look beneath the surface." : isCopper ? "A copper penny. A deeper personal echo." : "Throw in a penny. Hear what the water has to say.", width / 2, 1330);
@@ -1285,19 +1394,21 @@ function buildFollowUpDraft(record = runtime.currentRecord) {
     originalWish: record.wish || "",
     originalAnswer: record.response?.answer || "",
     originalMeaning: record.response?.meaning || "",
+    originalClarification: record.clarification || "",
     direction: saved?.direction || "clarity",
     question: saved?.question || "What am I overlooking here?"
   };
 }
 
-function openFollowUp({ resume = false } = {}) {
+function openFollowUp({ resume = false, preferredCoin = null } = {}) {
   const record = runtime.currentRecord || state.wishes.find(item => item.id === state.pendingFollowUp?.parentId);
   if (!record || record.response?.safety || record.isMonthly) return;
   runtime.currentRecord = record;
   runtime.followUpDraft = buildFollowUpDraft(record);
   const freeAvailable = freeFollowUpAvailable(record);
+  if (preferredCoin && !freeAvailable) runtime.followUpDraft.preferredCoin = preferredCoin;
 
-  if (elements.followUpKicker) elements.followUpKicker.textContent = freeAvailable ? "One free follow-up" : "Continue the same wish";
+  if (elements.followUpKicker) elements.followUpKicker.textContent = freeAvailable ? "Your first follow-up is free" : "Continue the same wish";
   elements.followUpEcho.textContent = `“${record.response?.shareLine || record.response?.answer || "The well is still listening."}”`;
   elements.followUpInput.value = runtime.followUpDraft.question;
   setFollowUpDirection(runtime.followUpDraft.direction, runtime.followUpDraft.question);
@@ -1305,7 +1416,11 @@ function openFollowUp({ resume = false } = {}) {
   if (elements.freeFollowUpAction) elements.freeFollowUpAction.hidden = !freeAvailable;
   if (elements.premiumFollowUpActions) elements.premiumFollowUpActions.hidden = freeAvailable;
   if (elements.followUpNote && !freeAvailable) {
-    elements.followUpNote.textContent = "Copper is practical and direct. Moon adds the deeper perspective shift.";
+    elements.followUpNote.textContent = preferredCoin === "moon"
+      ? "Moon is selected: use it when you want a fuller reading and a private Moon note."
+      : preferredCoin === "copper"
+        ? "Copper is selected: use it when you want clarity, a decision, or a concrete next move."
+        : "Copper is for a practical next move. Moon is for a fuller reading and perspective shift.";
   }
 
   updateUI();
@@ -1322,22 +1437,22 @@ function purchaseContextForFollowUp(coin) {
   const lead = document.querySelector("#pennyModalLead");
   if (title) title.textContent = `Continue this wish with ${label}`;
   if (lead) lead.textContent = coin === "moon"
-    ? "Moon pennies unlock the fullest continuation: deeper pattern insight, a perspective shift, and a moonlit share card."
-    : "Copper pennies let you ask one guided follow-up and receive a grounded answer tied to the wish you already made.";
+    ? "Use Moon when this is the wish you keep circling back to: a fuller reading, a different angle, a private Moon note, and the Moon share card."
+    : "Use Copper when you want to keep this exact wish moving with a practical question, clearer decision, or concrete next step.";
 }
 
 function resetPurchaseContext() {
   const title = document.querySelector("#pennyModalTitle");
   const lead = document.querySelector("#pennyModalLead");
-  if (title) title.textContent = "Choose how to go deeper";
-  if (lead) lead.textContent = "Copper continues a wish with practical follow-ups. Moon adds a deeper perspective shift and premium echo.";
+  if (title) title.textContent = "Keep the conversation going";
+  if (lead) lead.textContent = "The free penny gives you the first answer. Paid pennies are for continuing a wish you actually care about.";
 }
 
 async function beginFreeFollowUp() {
   if (!runtime.followUpDraft || !runtime.currentRecord || runtime.busy) return;
   const parentRecord = runtime.currentRecord;
   if (!freeFollowUpAvailable(parentRecord)) {
-    showToast("This wish has already used its free follow-up.");
+    showToast("Your free follow-up has already been used.");
     return;
   }
   const question = String(elements.followUpInput.value || runtime.followUpDraft.question || "").replace(/\s+/g, " ").trim().slice(0, 320);
@@ -1354,6 +1469,7 @@ async function beginFreeFollowUp() {
     originalWish: draft.originalWish,
     originalAnswer: draft.originalAnswer,
     originalMeaning: draft.originalMeaning,
+    originalClarification: draft.originalClarification || "",
     question: draft.question,
     direction: draft.direction
   };
@@ -1375,6 +1491,7 @@ async function beginFreeFollowUp() {
       id: createId(),
       cloudId: response.wishId || null,
       wish: draft.originalWish,
+      clarification: draft.originalClarification || "",
       responseKind: "follow_up",
       parentId: draft.parentId,
       parentCloudId: draft.parentCloudId,
@@ -1387,6 +1504,7 @@ async function beginFreeFollowUp() {
         nextStep: response.nextStep,
         shareLine: response.shareLine,
         followUpQuestion: response.followUpQuestion,
+        moonNote: response.moonNote || null,
         mood: response.mood,
         theme: response.theme || "uncertainty",
         safety: response.safety || null,
@@ -1407,7 +1525,7 @@ async function beginFreeFollowUp() {
   } catch (error) {
     showResponse(parentRecord);
     if (error.code === "FREE_FOLLOW_UP_USED") {
-      showToast("That free follow-up was already used. Copper or Moon can keep the conversation going.", 4200);
+      showToast("Your free follow-up has already been used. Copper or Moon can keep this wish going.", 4200);
     } else {
       showToast(error.message || "The well could not hear that follow-up. Nothing was charged.", 3800);
     }
@@ -1450,6 +1568,7 @@ function beginFollowUp(coin) {
     originalWish: draft.originalWish,
     originalAnswer: draft.originalAnswer,
     originalMeaning: draft.originalMeaning,
+    originalClarification: draft.originalClarification || "",
     question: draft.question,
     direction: draft.direction
   };
@@ -1462,12 +1581,13 @@ function beginFollowUp(coin) {
   elements.introCopy.hidden = true;
   elements.coinDock.hidden = false;
   elements.coinInstruction.textContent = coin === "moon"
-    ? "Throw the Moon penny to continue this wish"
-    : "Throw the Copper penny to continue this wish";
+    ? "The Moon penny is dropping into the same wish…"
+    : "The Copper penny is dropping into the same wish…";
   setCoinVisual(coin);
   renderCoinChoices({ forceCollapsed: true });
-  trackEvent("paid_follow_up_ready", { coin, direction: draft.direction });
-  setTimeout(() => elements.coinDock.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+  trackEvent("paid_follow_up_ready", { coin, direction: draft.direction, autoToss: true });
+  // Choosing the paid continuation is the action. Do not make the person tap the same coin a second time.
+  setTimeout(() => tossPenny(), 180);
 }
 
 function resumePendingFollowUp(deliveredCoin = null) {
@@ -1484,7 +1604,9 @@ function resumePendingFollowUp(deliveredCoin = null) {
   runtime.currentRecord = parent;
   runtime.followUpDraft = { ...pending };
   showResponse(parent);
-  setTimeout(() => openFollowUp({ resume: true }), 180);
+  // The user already chose the continuation before checkout. Resume it automatically once Stripe delivers the pennies.
+  elements.followUpInput.value = pending.question || "What am I overlooking here?";
+  setTimeout(() => beginFollowUp(coin), 220);
   return true;
 }
 
@@ -1550,6 +1672,8 @@ async function syncCloudState() {
           likelyMatch.parentCloudId = cloud.parent_wish_id || likelyMatch.parentCloudId || null;
           likelyMatch.followUpPrompt = cloud.follow_up_prompt || likelyMatch.followUpPrompt || null;
           likelyMatch.followUpDirection = cloud.follow_up_direction || likelyMatch.followUpDirection || null;
+          likelyMatch.clarification = cloud.clarification_text || likelyMatch.clarification || "";
+          if (cloud.moon_note) likelyMatch.response.moonNote = cloud.moon_note;
           if (cloud.response_kind === "follow_up" && cloud.coin_source === "local") {
             likelyMatch.coinSource = "free";
             likelyMatch.followUpTier = "free";
@@ -1560,6 +1684,7 @@ async function syncCloudState() {
           id: createId(),
           cloudId: cloud.id,
           wish: cloud.wish_text,
+          clarification: cloud.clarification_text || "",
           responseKind: cloud.response_kind || "wish",
           parentCloudId: cloud.parent_wish_id || null,
           followUpPrompt: cloud.follow_up_prompt || null,
@@ -1571,6 +1696,7 @@ async function syncCloudState() {
             nextStep: cloud.next_step,
             shareLine: cloud.share_line,
             followUpQuestion: cloud.follow_up_question,
+            moonNote: cloud.moon_note || null,
             mood: cloud.mood,
             theme: cloud.theme || "uncertainty",
             safety: cloud.safety || null,
@@ -1633,7 +1759,7 @@ async function loadConfig() {
     const response = await fetch("/api/config", { cache: "no-store" });
     runtime.config = await response.json();
     elements.paymentNote.textContent = runtime.config.payments
-      ? "Secure checkout opens through Stripe. Purchased credits are added after the signed webhook confirms payment."
+      ? "Secure Stripe checkout. Paid pennies are saved to this browser’s private well after payment is confirmed."
       : "Payments stay in preview until both Supabase and Stripe are connected.";
     await syncCloudState();
   } catch {
@@ -1756,13 +1882,20 @@ function registerPWA() {
 
 function bindEvents() {
   elements.wishInput.addEventListener("input", () => {
-    elements.characterCount.textContent = `${elements.wishInput.value.length} / 600`;
+    const length = elements.wishInput.value.length;
+    elements.characterCount.textContent = `${length} / 600`;
+    elements.characterCount.hidden = length < 450;
+    runtime.wishClarification = "";
+    runtime.wishCheckSkipped = false;
     if (elements.wishNudge && !wishNeedsMoreDetail(elements.wishInput.value)) elements.wishNudge.hidden = true;
+    if (elements.wishClarifier) elements.wishClarifier.hidden = true;
   });
   elements.wishInput.addEventListener("keydown", event => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") preparePenny();
   });
   elements.readyButton.addEventListener("click", preparePenny);
+  elements.clarifierButton?.addEventListener("click", acceptWishClarification);
+  elements.clarifierSkipButton?.addEventListener("click", skipWishClarification);
   elements.editWishButton.addEventListener("click", editWish);
   elements.coinChoiceToggle.addEventListener("click", () => {
     runtime.coinChoicesExpanded = !runtime.coinChoicesExpanded;
@@ -1826,6 +1959,14 @@ function bindEvents() {
     openOverlay(elements.pennyModal);
   });
   elements.upgradeButton.addEventListener("click", () => openFollowUp());
+  elements.upgradeCopperButton?.addEventListener("click", () => {
+    trackEvent("premium_path_selected", { coin: "copper" });
+    openFollowUp({ preferredCoin: "copper" });
+  });
+  elements.upgradeMoonButton?.addEventListener("click", () => {
+    trackEvent("premium_path_selected", { coin: "moon" });
+    openFollowUp({ preferredCoin: "moon" });
+  });
   for (const button of elements.followDirectionButtons) {
     button.addEventListener("click", () => {
       const direction = button.dataset.followDirection;

@@ -841,3 +841,224 @@ body.locked { overflow:hidden; }
 }
 .free-follow-up-action .full-width { width: 100%; }
 @media (max-width: 520px) { .modal-card { border-radius: 23px; } }
+
+/* v1.6 human-product pass: clarity first, premium value second */
+.composer-tip {
+  margin: 8px 3px 0;
+  color: #83968a;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.wish-clarifier {
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid rgba(216,187,111,.24);
+  border-radius: 16px;
+  background: rgba(216,187,111,.055);
+  text-align: left;
+}
+.wish-clarifier > span {
+  display: block;
+  color: #a89b77;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.wish-clarifier > p {
+  margin: 5px 0 10px;
+  color: #eee4c8;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.42;
+}
+#wishClarifierInput {
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+  border: 1px solid rgba(232,218,177,.15);
+  border-radius: 13px;
+  background: rgba(3,13,9,.55);
+  color: var(--ink);
+  padding: 10px 11px;
+  line-height: 1.45;
+}
+.clarifier-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.clarifier-actions .primary-button { min-height: 39px; padding: 8px 14px; }
+.clarifier-actions .text-button { font-size: 9px; }
+
+.moon-note-card {
+  position: relative;
+  margin-top: 12px;
+  padding: 15px 15px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(181,224,233,.27);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(180,224,233,.12), transparent 38%),
+    rgba(77,119,128,.08);
+  text-align: left;
+}
+.moon-note-card::after {
+  content: "☾";
+  position: absolute;
+  right: 12px;
+  top: 7px;
+  color: rgba(216,241,246,.2);
+  font-family: Georgia, serif;
+  font-size: 34px;
+}
+.moon-note-card > span {
+  color: #a9cbd2;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.moon-note-card > p {
+  position: relative;
+  z-index: 1;
+  margin: 7px 0 0;
+  max-width: 92%;
+  color: #d7e9e8;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  line-height: 1.52;
+}
+
+.premium-upgrade-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+}
+.premium-upgrade-actions[hidden] { display: none !important; }
+.premium-path {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 15px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform .18s ease, filter .18s ease, border-color .18s ease;
+}
+.premium-path:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.premium-path span { display: block; }
+.premium-path b { display: block; font-size: 12px; }
+.premium-path small { display: block; margin-top: 3px; font-size: 9px; font-weight: 600; opacity: .78; }
+.premium-path > strong { white-space: nowrap; font-size: 10px; }
+.copper-path {
+  border: 1px solid rgba(223,132,83,.38);
+  background: rgba(198,103,54,.08);
+  color: #efc1a0;
+}
+.moon-path {
+  border: 1px solid rgba(180,224,233,.34);
+  background: rgba(131,196,210,.08);
+  color: #d7eef2;
+}
+
+.purchase-modal-card { width: min(540px, 100%); }
+.wallet-inline {
+  margin: -7px auto 15px;
+  color: #7f9186;
+  font-size: 9px;
+}
+.wallet-inline span { white-space: nowrap; }
+.wallet-inline b { color: #c8d4cc; font-weight: 800; }
+.value-options { gap: 9px; }
+.value-card {
+  align-items: center;
+  min-height: 88px;
+  padding: 13px 13px;
+}
+.value-card.featured { padding-top: 18px; }
+.value-copy {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.value-copy > span { min-width: 0; }
+.value-coin {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+}
+.copper-value {
+  color: #4d2517;
+  border: 1px solid #d7905d;
+  background: radial-gradient(circle at 35% 25%, #efa979, #b5683f 60%, #75402a);
+}
+.moon-value {
+  color: #183a43;
+  border: 1px solid #d7edf1;
+  background: radial-gradient(circle at 35% 25%, #f7fdff, #b3d4db 62%, #658b95);
+}
+.value-card .value-copy strong { font-size: 13px; }
+.value-card .value-copy small { max-width: 355px; line-height: 1.35; }
+.value-card .value-copy em {
+  position: static;
+  display: inline-block;
+  margin-top: 5px;
+  padding: 2px 5px;
+  border: 1px solid rgba(232,218,177,.12);
+  border-radius: 999px;
+  color: #9cad9f;
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: .05em;
+  text-transform: none;
+}
+.best-fit {
+  position: absolute !important;
+  top: 4px;
+  left: 13px;
+  color: #b9dbe2;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.purchase-modal-card .purchase-trust { margin: 11px 0 3px; }
+.subtle-gift {
+  margin-top: 9px;
+  opacity: .65;
+  background: transparent;
+  border-color: rgba(232,218,177,.09);
+}
+
+/* The scenery supports the ritual; it should not compete with it. */
+.first-visit .stars { opacity: .68; }
+.first-visit .fireflies { opacity: .52; }
+.first-visit .ambient-noise { opacity: .026; }
+
+@media (max-width: 520px) {
+  .composer-tip { font-size: 9px; }
+  .clarifier-actions { align-items: stretch; flex-direction: column; }
+  .clarifier-actions .text-button { min-height: 32px; }
+  .premium-path { min-height: 54px; }
+  .value-card { min-height: 96px; gap: 9px; }
+  .value-card > b { font-size: 17px; }
+  .value-coin { width: 30px; height: 30px; }
+  .value-card .value-copy strong { font-size: 12px; }
+  .value-card .value-copy small { font-size: 9px; }
+  .purchase-modal-card { padding-left: 15px; padding-right: 15px; }
+}

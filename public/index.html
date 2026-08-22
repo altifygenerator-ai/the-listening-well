@@ -90,8 +90,8 @@
       <button class="brand" id="homeButton" aria-label="Return to the well">
         <span class="brand-mark" aria-hidden="true">◌</span>
         <span>
-          <strong>The Listening Well</strong>
-          <small>Private wishes. Thoughtful echoes.</small>
+          <strong>Throw a Penny</strong>
+          <small>The Listening Well</small>
         </span>
       </button>
       <nav class="top-actions" aria-label="Well controls">
@@ -161,14 +161,14 @@
         <section class="intro-copy" id="introCopy">
           <p class="eyebrow">A private place for one honest wish</p>
           <h1>Throw a penny.<br />Hear what comes back.</h1>
-          <p>Type one private wish. Your first penny is free.</p>
+          <p>One private wish. One free penny. No account needed.</p>
         </section>
 
         <section class="wish-composer glass-panel" id="wishComposer" aria-labelledby="wishPrompt">
           <div class="composer-heading">
             <div>
               <p class="step-label">Your penny is waiting</p>
-              <h2 id="wishPrompt">What do you want the well to hear?</h2>
+              <h2 id="wishPrompt">What are you wishing for?</h2>
             </div>
             <span class="privacy-mark" title="Private by default">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6.5 10h11A1.5 1.5 0 0 1 19 11.5v7A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10Z"/></svg>
@@ -177,10 +177,20 @@
           </div>
           <label class="sr-only" for="wishInput">Type your private wish</label>
           <textarea id="wishInput" maxlength="600" rows="3" placeholder="I wish…" autocomplete="off"></textarea>
-          <p class="wish-nudge" id="wishNudge" hidden>Give the well one more detail: what would actually be different if this wish came true?</p>
+          <p class="composer-tip">One real detail helps: what happened, what you want, or what feels stuck.</p>
+          <p class="wish-nudge" id="wishNudge" hidden>Give the well one more detail so it does not have to guess.</p>
+          <div class="wish-clarifier" id="wishClarifier" hidden>
+            <span>The well needs one thing clearer</span>
+            <p id="wishClarifierQuestion">What would actually be different if this wish came true?</p>
+            <textarea id="wishClarifierInput" rows="2" maxlength="500" placeholder="Just one detail…"></textarea>
+            <div class="clarifier-actions">
+              <button type="button" class="primary-button" id="clarifierButton">Add that detail</button>
+              <button type="button" class="text-button" id="clarifierSkipButton">Use my wish as written</button>
+            </div>
+          </div>
           <div class="composer-footer">
-            <span id="characterCount">0 / 600</span>
-            <button class="primary-button" id="readyButton">Place it in the penny</button>
+            <span id="characterCount" hidden>0 / 600</span>
+            <button class="primary-button" id="readyButton">Ready my penny</button>
           </div>
         </section>
 
@@ -217,8 +227,12 @@
             <p id="meaningText"></p>
           </details>
           <div class="carry-card">
-            <span>Carry this with you</span>
+            <span>One thing worth doing</span>
             <p id="nextStepText"></p>
+          </div>
+          <div class="moon-note-card" id="moonNoteCard" hidden>
+            <span>A note from farther down the path</span>
+            <p id="moonNoteText"></p>
           </div>
           <section class="upgrade-offer" id="upgradeOffer" hidden>
             <div class="upgrade-glow" aria-hidden="true"></div>
@@ -226,6 +240,14 @@
             <h3 id="upgradeTitle">Ask one follow-up free</h3>
             <p id="upgradeText">See whether the well really understood this wish before you decide to go any deeper.</p>
             <button class="gold-button full-width" id="upgradeButton">Ask one free follow-up</button>
+            <div class="premium-upgrade-actions" id="premiumUpgradeActions" hidden>
+              <button type="button" class="premium-path copper-path" id="upgradeCopperButton">
+                <span><b>Copper</b><small>Get a practical next move</small></span><strong>Continue →</strong>
+              </button>
+              <button type="button" class="premium-path moon-path" id="upgradeMoonButton">
+                <span><b>Moon</b><small>Get the fuller reading + Moon note</small></span><strong>Go deeper →</strong>
+              </button>
+            </div>
           </section>
           <div class="response-actions compact-actions">
             <button class="quiet-action" id="sealButton">Seal for later</button>
@@ -318,41 +340,43 @@
 
     <aside class="modal" id="pennyModal" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pennyModalTitle">
+      <div class="modal-card purchase-modal-card" role="dialog" aria-modal="true" aria-labelledby="pennyModalTitle">
         <button class="modal-close" data-close-modal aria-label="Close">×</button>
         <div class="modal-coin" aria-hidden="true">1¢</div>
-        <p class="eyebrow">Continue when it matters</p>
-        <h2 id="pennyModalTitle">Choose how to go deeper</h2>
-        <p class="modal-lead" id="pennyModalLead">Copper continues a wish with practical follow-ups. Moon adds a deeper perspective shift and premium echo.</p>
-        <div class="wallet-summary" aria-label="Your penny wallet">
-          <div><span class="wallet-coin daily-wallet">1¢</span><b id="walletDaily">1</b><small>Daily</small></div>
-          <div><span class="wallet-coin copper-wallet">C</span><b id="walletCopper">0</b><small>Copper</small></div>
-          <div><span class="wallet-coin moon-wallet">☾</span><b id="walletMoon">0</b><small>Moon</small></div>
-        </div>
-        <div class="purchase-trust" aria-label="Purchase details">
-          <span>Secure Stripe checkout</span>
-          <span>No account required</span>
-          <span>Credits stay in your well</span>
-        </div>
-        <div class="price-options">
-          <button class="price-card" data-pack="copper_10">
-            <span><strong>10 Copper pennies</strong><small>10 practical continuations for wishes you already care about</small></span>
+        <p class="eyebrow">For wishes worth staying with</p>
+        <h2 id="pennyModalTitle">Keep the conversation going</h2>
+        <p class="modal-lead" id="pennyModalLead">The free penny gives you the first answer. Paid pennies are for continuing a wish you actually care about.</p>
+        <p class="wallet-inline">In your well: <span><b id="walletDaily">1</b> daily</span> · <span><b id="walletCopper">0</b> Copper</span> · <span><b id="walletMoon">0</b> Moon</span></p>
+        <div class="price-options value-options">
+          <button class="price-card value-card" data-pack="copper_10">
+            <span class="value-copy">
+              <i class="value-coin copper-value">C</i>
+              <span><strong>Copper · keep a wish moving</strong><small>Ask practical follow-ups when you want clarity, a decision, or a real next step.</small><em>10 continuations</em></span>
+            </span>
             <b>$2.99</b>
           </button>
-          <button class="price-card featured" data-pack="moon_30">
-            <em>Best experience</em>
-            <span><strong>30 Moon pennies</strong><small>30 deeper continuations with a distinct Moon Water perspective</small></span>
+          <button class="price-card featured value-card" data-pack="moon_30">
+            <span class="best-fit">Most to explore</span>
+            <span class="value-copy">
+              <i class="value-coin moon-value">☾</i>
+              <span><strong>Moon · see the wish differently</strong><small>A fuller reading, deeper perspective shift, private Moon note, and Moon share card.</small><em>30 Moon readings</em></span>
+            </span>
             <b>$4.99</b>
           </button>
         </div>
+        <div class="purchase-trust" aria-label="Purchase details">
+          <span>Secure Stripe checkout</span>
+          <span>No subscription required</span>
+          <span>No account required</span>
+        </div>
         <details class="keeper-option" id="keeperDetails">
-          <summary>Want monthly Moon pennies?</summary>
+          <summary>Use the well a lot? See Well Keeper</summary>
           <button class="price-card keeper-card" data-pack="keeper_monthly">
             <span><strong>Well Keeper</strong><small>90 Moon pennies added each month</small></span>
             <b>$4.99<small>/mo</small></b>
           </button>
         </details>
-        <button class="gift-button" id="giftButton">Invite someone to throw their first penny</button>
+        <button class="gift-button subtle-gift" id="giftButton">Send the free well to a friend</button>
         <p class="payment-note" id="paymentNote">Payments stay in preview until Supabase and Stripe are connected.</p>
       </div>
     </aside>
@@ -361,7 +385,7 @@
       <div class="modal-backdrop" data-close-followup></div>
       <div class="modal-card follow-up-card" role="dialog" aria-modal="true" aria-labelledby="followUpTitle">
         <button class="modal-close" data-close-followup aria-label="Close">×</button>
-        <p class="eyebrow" id="followUpKicker">One free follow-up</p>
+        <p class="eyebrow" id="followUpKicker">Your first follow-up is free</p>
         <h2 id="followUpTitle">What do you want to ask next?</h2>
         <p class="follow-up-echo" id="followUpEcho"></p>
         <div class="follow-up-directions" role="group" aria-label="Choose a follow-up direction">
@@ -375,17 +399,17 @@
 
         <div class="free-follow-up-action" id="freeFollowUpAction">
           <button class="gold-button full-width" id="continueFreeButton">Ask this follow-up free</button>
-          <small>No penny needed. One free follow-up per wish.</small>
+          <small>No penny needed. This one free follow-up lets you test whether the well really understood you.</small>
         </div>
 
         <div class="premium-follow-up-actions" id="premiumFollowUpActions" hidden>
-          <p class="follow-up-note" id="followUpNote">Keep this same conversation going with a paid penny.</p>
+          <p class="follow-up-note" id="followUpNote">Paid pennies stay with this same wish instead of starting over.</p>
           <div class="follow-up-coin-actions">
             <button class="copper-follow-button" id="continueCopperButton">
-              <span>Copper · practical clarity</span><small id="followCopperBalance">0 ready</small>
+              <span>Copper · practical next move</span><small id="followCopperBalance">0 ready</small>
             </button>
             <button class="moon-follow-button" id="continueMoonButton">
-              <span>Moon · deeper perspective</span><small id="followMoonBalance">0 ready</small>
+              <span>Moon · fuller reading + Moon note</span><small id="followMoonBalance">0 ready</small>
             </button>
           </div>
         </div>

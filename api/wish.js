@@ -63,14 +63,15 @@ async function freeFollowUpAvailable({ sessionId, parentCloudId }) {
     { method: "GET" }
   );
   if (!Array.isArray(parentRows) || !parentRows.length) return { allowed: false, reason: "parent_not_found" };
+  // The free continuation is a one-time proof of value for the whole well, not one free chat turn on every daily wish.
   const usedRows = await supabaseRequest(
-    `wishes?session_id=eq.${sessionId}&parent_wish_id=eq.${parentCloudId}&response_kind=eq.follow_up&coin_source=eq.local&select=id&limit=1`,
+    `wishes?session_id=eq.${sessionId}&response_kind=eq.follow_up&coin_source=eq.local&select=id&limit=1`,
     { method: "GET" }
   );
   return { allowed: !Array.isArray(usedRows) || usedRows.length === 0, reason: "already_used" };
 }
 
-async function persistWish({ sessionId, wish, response, coinSource, followUp = null }) {
+async function persistWish({ sessionId, wish, clarification = "", response, coinSource, followUp = null }) {
   if (!process.env.SUPABASE_URL || !(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) return null;
   await rpc("touch_well_profile", { p_session_id: sessionId });
   const baseRow = {
@@ -81,6 +82,8 @@ async function persistWish({ sessionId, wish, response, coinSource, followUp = n
     next_step: response.nextStep,
     share_line: response.shareLine,
     follow_up_question: response.followUpQuestion,
+    clarification_text: clarification || null,
+    moon_note: response.moonNote || null,
     mood: response.mood,
     theme: response.theme || "uncertainty",
     coin_source: coinSource || "local",
@@ -97,10 +100,19 @@ async function persistWish({ sessionId, wish, response, coinSource, followUp = n
     const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(extendedRow) });
     return rows?.[0]?.id || null;
   } catch (error) {
-    const legacySchema = followUp && /response_kind|parent_wish_id|follow_up_prompt|follow_up_direction|schema cache/i.test(String(error.message));
-    if (!legacySchema) throw error;
-    const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(baseRow) });
-    return rows?.[0]?.id || null;
+    const message = String(error.message || "");
+    if (!/response_kind|parent_wish_id|follow_up_prompt|follow_up_direction|clarification_text|moon_note|schema cache/i.test(message)) throw error;
+
+    const { clarification_text, moon_note, ...withoutPersonalFields } = extendedRow;
+    try {
+      const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(withoutPersonalFields) });
+      return rows?.[0]?.id || null;
+    } catch (secondError) {
+      if (!followUp || !/response_kind|parent_wish_id|follow_up_prompt|follow_up_direction|schema cache/i.test(String(secondError.message || ""))) throw secondError;
+      const { clarification_text: _clarification, moon_note: _moon, ...legacyBaseRow } = baseRow;
+      const rows = await supabaseRequest("wishes", { method: "POST", body: JSON.stringify(legacyBaseRow) });
+      return rows?.[0]?.id || null;
+    }
   }
 }
 
@@ -121,10 +133,12 @@ export default async function handler(req, res) {
         })).filter(item => item.wish)
       : [];
     const coinIntent = normalizeCoinIntent(body.coinIntent);
+    const clarification = sanitizeWish(body.clarification).slice(0, 500);
     const followUp = body.followUp && typeof body.followUp === "object" ? {
       parentCloudId: uuidLike(body.followUp.parentCloudId) ? body.followUp.parentCloudId : null,
       originalAnswer: sanitizeWish(body.followUp.originalAnswer).slice(0, 900),
       originalMeaning: sanitizeWish(body.followUp.originalMeaning).slice(0, 700),
+      originalClarification: sanitizeWish(body.followUp.originalClarification).slice(0, 500),
       question: sanitizeWish(body.followUp.question).slice(0, 320),
       direction: ["clarity", "action", "release", "custom"].includes(body.followUp.direction) ? body.followUp.direction : "custom"
     } : null;
@@ -140,7 +154,8 @@ export default async function handler(req, res) {
 
     let response = null;
     const moderationInput = followUp ? `${wish}
-Follow-up: ${followUp.question}` : wish;
+Follow-up: ${followUp.question}` : `${wish}${clarification ? `
+Additional detail: ${clarification}` : ""}`;
     const localSafety = detectLocalSafety(moderationInput);
     if (localSafety === "crisis") response = crisisResponse();
     if (localSafety === "harm") response = harmfulResponse();
@@ -171,7 +186,7 @@ Follow-up: ${followUp.question}` : wish;
       if (!availability.allowed) {
         return jsonResponse(res, 409, {
           error: availability.reason === "already_used"
-            ? "This wish has already used its free follow-up."
+            ? "Your free follow-up has already been used."
             : "The original wish could not be verified for a free follow-up.",
           code: availability.reason === "already_used" ? "FREE_FOLLOW_UP_USED" : "FREE_FOLLOW_UP_UNAVAILABLE"
         });
@@ -204,6 +219,7 @@ Follow-up: ${followUp.question}` : wish;
               priorThemes,
               priorContext,
               followUp,
+              clarification,
               apiKey: process.env.OPENAI_API_KEY,
               model: process.env.OPENAI_MODEL || "gpt-5",
               depth,
@@ -218,7 +234,7 @@ Follow-up: ${followUp.question}` : wish;
     }
 
     let wishId = null;
-    if (!response.safety) wishId = await persistWish({ sessionId, wish, response, coinSource, followUp });
+    if (!response.safety) wishId = await persistWish({ sessionId, wish, clarification, response, coinSource, followUp });
     refundableCoin = null;
 
     return jsonResponse(res, 200, {
@@ -240,6 +256,10 @@ Follow-up: ${followUp.question}` : wish;
         console.error("Could not automatically restore the consumed penny:", restoreError);
       }
     }
-    return jsonResponse(res, 500, { error: "The well went quiet for a moment. Your penny was restored." });
+    return jsonResponse(res, 500, {
+      error: refundableCoin
+        ? "The well could not give this wish a response good enough to keep. Your penny was restored; try adding one more real detail."
+        : "The well could not give this wish a response good enough to keep. No penny was used; try adding one more real detail."
+    });
   }
 }

@@ -36,7 +36,7 @@ A user who completes an ordinary daily wish now sees:
 
 They can ask for clarity, a first action, help identifying what can be released, or write their own question. This continuation uses the original wish and original response as context.
 
-With Supabase connected, the server verifies the original wish and allows only one free follow-up for that wish. It does not consume Daily, Copper, or Moon credits.
+With Supabase connected, the server verifies the original wish and allows one free follow-up total for the anonymous well session. It does not consume Daily, Copper, or Moon credits. After that proof-of-value moment, continuing an existing wish belongs to Copper or Moon.
 
 After the free continuation, the next offer clearly explains:
 

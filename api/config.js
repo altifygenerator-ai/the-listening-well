@@ -16,6 +16,6 @@ export default async function handler(req, res) {
     webhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     admin: Boolean(database && process.env.ADMIN_SETUP_TOKEN),
     adminEmail: primaryAdminEmail(),
-    appName: "The Listening Well"
+    appName: "Throw a Penny"
   });
 }

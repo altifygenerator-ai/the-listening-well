@@ -1,4 +1,4 @@
-const CACHE = "listening-well-v6";
+const CACHE = "listening-well-v7";
 const APP_SHELL = ["/", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", event => {

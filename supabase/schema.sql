@@ -28,6 +28,8 @@ create table if not exists public.wishes (
   next_step text not null,
   share_line text not null,
   follow_up_question text,
+  clarification_text text,
+  moon_note text,
   mood text not null default 'moonlit',
   theme text not null default 'uncertainty',
   coin_source text not null default 'daily' check (coin_source in ('daily','copper','moon','safety','local')),

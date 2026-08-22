@@ -1,9 +1,9 @@
 {
   "name": "the-listening-well",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
-  "description": "A simplified mobile-first AI wishing well with progressive disclosure, personal follow-up echoes, daily/copper/moon experiences, Supabase storage, Stripe payments, Vercel Analytics, and a secure admin panel.",
+  "description": "A mobile-first digital wishing well built around specific AI reflections, one-time free follow-up proof, paid Copper/Moon continuations, private journaling, Supabase storage, Stripe payments, sharing, analytics, and admin tools.",
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
@@ -11,5 +11,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }

@@ -103,6 +103,7 @@ async function openAIAudit() {
           specificity: 5,
           directness: 5,
           grounding: 5,
+          usefulness: 5,
           genericRisk: false,
           inventedDetails: false,
           critique: "Strong and specific."
@@ -178,14 +179,16 @@ async function qualityRetryAudit() {
     const payload = JSON.parse(options.body);
     if (payload?.text?.format?.name === "well_quality") {
       qualityCalls += 1;
+      const corrected = qualityCalls > 1;
       return new Response(JSON.stringify({
         output_text: JSON.stringify({
-          specificity: 2,
-          directness: 3,
-          grounding: 2,
-          genericRisk: true,
+          specificity: corrected ? 5 : 2,
+          directness: corrected ? 5 : 3,
+          grounding: corrected ? 5 : 2,
+          usefulness: corrected ? 5 : 2,
+          genericRisk: !corrected,
           inventedDetails: false,
-          critique: "The answer could fit almost any work wish. Address the stated customer problem and dependable-income goal directly."
+          critique: corrected ? "Specific and grounded." : "The answer could fit almost any work wish. Address the stated customer problem and dependable-income goal directly."
         })
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
@@ -216,8 +219,60 @@ async function qualityRetryAudit() {
       model: "gpt-5"
     });
     assert.equal(responseCalls, 2, "A failed quality review did not trigger one regeneration");
-    assert.equal(qualityCalls, 1);
+    assert.equal(qualityCalls, 2, "The regenerated answer was not quality-checked before being shown");
     assert.match(result.answer, /repeat customers/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+
+async function qualityHardStopAudit() {
+  const { generateOpenAIWish } = await import("../lib/well-core.js");
+  const originalFetch = globalThis.fetch;
+  let responseCalls = 0;
+  let qualityCalls = 0;
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    if (payload?.text?.format?.name === "well_quality") {
+      qualityCalls += 1;
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          specificity: 2,
+          directness: 3,
+          grounding: 2,
+          usefulness: 2,
+          genericRisk: true,
+          inventedDetails: false,
+          critique: "Still too generic to ship."
+        })
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    responseCalls += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        answer: "Keep going and trust yourself.",
+        meaning: "This may be about growth.",
+        nextStep: "Take a small step.",
+        shareLine: "Keep moving toward what matters.",
+        followUpQuestion: "What matters next?",
+        moonNote: null,
+        mood: "steady",
+        theme: "uncertainty"
+      })
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    await assert.rejects(
+      () => generateOpenAIWish({
+        wish: "I wish my business had enough repeat landscaping customers to cover payroll every month",
+        apiKey: "test",
+        model: "gpt-5"
+      }),
+      error => error?.code === "WELL_RESPONSE_QUALITY"
+    );
+    assert.equal(responseCalls, 2, "The quality gate should allow one regeneration before refusing a weak response");
+    assert.equal(qualityCalls, 2, "Both generated drafts should be quality reviewed before the hard stop");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -240,7 +295,7 @@ async function freeFollowUpAudit() {
     if (value.includes("/rest/v1/wishes?id=eq.") && (options.method || "GET") === "GET") {
       return new Response(JSON.stringify([{ id: parentId }]), { status: 200, headers: { "content-type": "application/json" } });
     }
-    if (value.includes("parent_wish_id=eq.") && (options.method || "GET") === "GET") {
+    if (value.includes("response_kind=eq.follow_up") && value.includes("coin_source=eq.local") && (options.method || "GET") === "GET") {
       return new Response(JSON.stringify(alreadyUsed ? [{ id: "55555555-5555-4555-8555-555555555555" }] : []), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (value.endsWith("/rest/v1/rpc/touch_well_profile")) {
@@ -488,6 +543,11 @@ async function refundAudit() {
 async function sqlAudit() {
   const schema = await read("supabase/schema.sql");
   const migration = await read("supabase/migrations/20260804_coin_wallet_admin.sql");
+  const personalMigration = await read("supabase/migrations/20260821_personal_readings.sql");
+  assert.match(schema, /clarification_text text/);
+  assert.match(schema, /moon_note text/);
+  assert.match(personalMigration, /add column if not exists clarification_text/);
+  assert.match(personalMigration, /add column if not exists moon_note/);
   for (const sql of [schema, migration]) {
     for (const required of ["copper_credits", "moon_credits", "consume_well_coin", "restore_well_coin", "grant_well_credits", "record_well_webhook_event", "set_well_subscription"]) {
       assert.ok(sql.includes(required), `SQL is missing ${required}`);
@@ -502,6 +562,7 @@ results.dom = await staticAudit();
 await commerceAudit();
 await openAIAudit();
 await qualityRetryAudit();
+await qualityHardStopAudit();
 await freeFollowUpAudit();
 await checkoutAudit();
 await stripeCatalogAudit();
