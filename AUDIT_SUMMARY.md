@@ -1,32 +1,32 @@
-# August 4 audit summary
+# Throw a Penny v1.7.3 audit summary
 
-## Stripe and webhook
+This release is based on the uploaded production project and focuses on customer-visible reliability rather than adding more features.
 
-- Existing pack keys and environment variable names were preserved.
-- Copper, moon, and monthly credits now have explicit mappings in `lib/commerce.js`.
-- The webhook verifies the Stripe signature from the raw body.
-- It retrieves the actual Stripe Checkout line item or subscription and rejects a mismatched Price ID.
-- Event IDs are unique in `well_credit_events`, preventing duplicate grants.
-- Webhook receipt/status is stored in `well_webhook_events` and visible in Admin.
-- Checkout remains disabled unless Supabase, Stripe, the webhook secret, and all Price IDs are configured.
+## Fixed reliability issues
 
-## Admin
+- Stripe webhook signature verification now preserves the exact signed request body on Vercel.
+- The wish pipeline now uses one generation, one quality review, and at most one focused rewrite instead of repeated model calls that could turn a good wish into a timeout.
+- OpenAI failures in production do not silently show canned development responses.
+- Consumed pennies are restored when generation or persistence fails.
+- Daily-penny state uses the same UTC day boundary as Supabase and automatically resyncs stale browser state.
+- Payment returns recognize credits delivered while the customer was still on Stripe Checkout.
+- Old browser/session data is repaired where possible instead of repeatedly breaking the experience.
+- Journal deletion fails safely if cloud deletion cannot be confirmed.
+- Well Keeper cancellation is available directly from the penny wallet.
+- PWA updates now actively replace stale releases for already-installed users.
 
-- Allowed email: `altifygenerator@gmail.com`
-- URL: `/admin.html`
-- First setup requires a strong server-only `ADMIN_SETUP_TOKEN` and a chosen password.
-- The account is created through Supabase Auth and marked as admin.
-- The setup token can be removed after account creation.
-- Admin can grant test copper or moon pennies, inspect balances, review webhook delivery, and verify Stripe catalog alignment.
-- Private wish text is intentionally excluded from admin analytics.
+## Customer-facing cleanup
 
-## Coin types
+- Public metadata and visible copy describe the wishing-well experience rather than the implementation stack.
+- Setup/database/webhook language is kept out of the customer experience.
+- Payment and failure messages are written as normal customer messages.
+- Privacy and Terms pages accurately describe browser-linked journals, third-party response processing, sharing, Stripe payments, analytics, and Well Keeper cancellation.
+- Admin remains private, unlinked from the customer footer, and marked `noindex,nofollow,noarchive`.
 
-- Daily: standard copper penny and standard response.
-- Copper: orange/copper coin, Deep Water response, copper wallet.
-- Moon: silver-blue glowing coin, crescent mark, Moon Water response, moon wallet.
-- Well Keeper renewals deliver moon pennies.
+## Preserved integrations
 
-## Important correction
-
-The previous build changed premium styling but did not send the premium depth to OpenAI. The current build sends an explicit response mode and uses strict Structured Outputs, so Copper and Moon responses are now different at the AI layer as well as visually.
+- `throwapenny.com` canonical/SEO metadata and Google verification.
+- Vercel Web Analytics loader and privacy-safe custom event calls.
+- Existing Stripe product keys and prices.
+- Existing Supabase schema/migrations and anonymous journal model.
+- Copper and Moon wallets, share cards, sealed wishes, monthly echoes, admin tools, and refined OpenAI prompt.

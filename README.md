@@ -32,8 +32,9 @@ Production responses are not accepted just because the model returned valid JSON
 - The prompt extracts the literal subject, desired outcome, supported tension, and concrete details before answering.
 - Generic mystical filler and unsupported assumptions are explicitly prohibited.
 - A separate model pass grades specificity, directness, grounding, usefulness, generic risk, and invented details.
-- A weak first draft is regenerated from the editor critique and reviewed again.
-- If OpenAI is unavailable in production, the app returns the penny rather than presenting a canned fallback as a real reading.
+- A weak first draft gets one focused rewrite from the editor critique.
+- A deterministic final guard rejects known canned phrases and responses that are not visibly anchored to the person's wish. If the rewrite still fails that guard, the penny is returned instead of showing a bad answer.
+- If OpenAI is unavailable, the app returns the penny rather than presenting a canned fallback as a real reading.
 
 ## Run locally
 
@@ -53,7 +54,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Without credentials, local development still supports the animation, journal, deterministic fallback responses, share cards, and habit layer. Production should have OpenAI configured before launch.
+Without an OpenAI key, the interface, animation, journal, share cards, and other local UI can still be tested, but wishes intentionally do not generate fake fallback answers. Add `OPENAI_API_KEY` to test the real response flow.
 
 ## Validate the project
 
@@ -61,7 +62,7 @@ Without credentials, local development still supports the animation, journal, de
 npm run check
 ```
 
-The project check covers JavaScript syntax, DOM references, Vercel admin routes, coin mappings, response modes, response-quality retry behavior, Stripe Checkout metadata, webhook fulfillment, subscription renewals, free-follow-up enforcement, Supabase functions, and paid-penny restoration after a failed write.
+The project check covers JavaScript syntax, DOM references, Vercel admin routes, coin mappings, response modes, response-quality retry behavior, Stripe Checkout metadata, raw-body webhook fulfillment, subscription renewals and cancellation, safe cloud deletion, free-follow-up enforcement, Supabase functions, and paid-penny restoration after a failed write.
 
 ## Supabase
 
@@ -91,7 +92,8 @@ api/wish-check.js                        Optional pre-toss specificity check
 api/wish.js                              Safety, coin use, AI generation, persistence
 lib/well-core.js                         Main AI prompt, structured output, quality gate
 lib/commerce.js                          Stripe pack source of truth
-api/checkout.js                          Stripe-hosted Checkout
+api/checkout.js                         Stripe-hosted Checkout
+api/cancel-keeper.js                    Customer-initiated Well Keeper cancellation
 api/stripe-webhook.js                    Signed/idempotent fulfillment
 public/admin.html                        Private admin interface
 supabase/schema.sql                      Complete new-project database
@@ -104,9 +106,11 @@ WEBHOOK_ADMIN_SETUP.md                   Setup/testing guide
 - Stripe webhook signatures are verified against the raw request body.
 - Actual Stripe Price IDs are verified before credits are granted.
 - Stripe event IDs are stored to prevent duplicate fulfillment.
+- Well Keeper can be canceled from the penny wallet; future renewals stop while existing pennies remain.
 - Copper and Moon balances are separate.
 - A paid penny is restored if it is consumed but the completed wish cannot be saved.
 - Private wish text is not included in public share cards or analytics events.
+- Clearing the browser-linked well only removes local state after cloud deletion is confirmed.
 - There is currently no customer login. Paid pennies and journal recovery are tied to the anonymous browser session; do not imply cross-device recovery until account recovery is added.
 
 ## Admin
@@ -118,3 +122,7 @@ altifygenerator@gmail.com
 ```
 
 See `WEBHOOK_ADMIN_SETUP.md` for first-time admin creation, Stripe testing, webhook verification, and manual Copper/Moon grants.
+
+## v1.7.3 response repair
+
+The current build includes a client/server version handshake, retired-response filtering, versioned assets, and a stricter direct-answer prompt so old canned responses cannot silently reappear.

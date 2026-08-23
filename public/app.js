@@ -3,8 +3,21 @@ const SHARE_NAME = "Throw a Penny";
 const TOSS_DURATION_MS = 2150;
 const SPLASH_TRIGGER_MS = 1810;
 const MIN_RITUAL_DURATION_MS = 3500;
+const PURCHASE_CONFIRMATION_DELAYS_MS = [700, 1400, 2600, 4200, 6500, 9000];
+const CLIENT_VERSION = "1.7.3";
 
 const memoryStorage = new Map();
+
+function browserStorageIsPersistent() {
+  try {
+    const key = "__throwapenny_storage_test__";
+    window.localStorage.setItem(key, "1");
+    window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function storageGet(key) {
   try {
@@ -43,6 +56,10 @@ function createId() {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = [...bytes].map(value => value.toString(16).padStart(2, "0"));
   return `${hex.slice(0,4).join("")}-${hex.slice(4,6).join("")}-${hex.slice(6,8).join("")}-${hex.slice(8,10).join("")}-${hex.slice(10).join("")}`;
+}
+
+function validSessionId(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
 }
 
 const $ = selector => document.querySelector(selector);
@@ -130,6 +147,7 @@ const elements = {
   walletMoon: $("#walletMoon"),
   pennyModal: $("#pennyModal"),
   paymentNote: $("#paymentNote"),
+  manageKeeperButton: $("#manageKeeperButton"),
   giftButton: $("#giftButton"),
   sealModal: $("#sealModal"),
   shareModal: $("#shareModal"),
@@ -151,7 +169,9 @@ const runtime = {
   currentRecord: null,
   pendingCoinSource: null,
   busy: false,
-  config: { ai: false, database: false, payments: false },
+  config: { ai: false, database: false, payments: false, version: null },
+  configReady: false,
+  persistentStorage: browserStorageIsPersistent(),
   installPrompt: null,
   pointerStart: null,
   toastTimer: null,
@@ -168,6 +188,10 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function dailyDateKey(date = new Date()) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
 function monthKey(date = new Date()) {
   const value = new Date(date);
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
@@ -180,10 +204,10 @@ function currentMonthReflection() {
 
 function freshState() {
   return {
-    version: 3,
+    version: 4,
     sessionId: createId(),
     createdAt: new Date().toISOString(),
-    dailyRefreshDate: localDateKey(),
+    dailyRefreshDate: dailyDateKey(),
     dailyAvailable: true,
     copperCredits: 0,
     moonCredits: 0,
@@ -198,23 +222,58 @@ function freshState() {
   };
 }
 
+
+const RETIRED_RESPONSE_PATTERNS = [
+  /a wish is often a direction before it is a destination/i,
+  /the water cannot choose for you/i,
+  /the part of you that already (?:knows|leans)/i,
+  /permission,? clarity,? or relief/i,
+  /make this wish five percent more real/i,
+  /the part i can influence is/i
+];
+
+function isRetiredGenericResponse(record) {
+  const text = [record?.response?.answer, record?.response?.meaning, record?.response?.nextStep]
+    .filter(Boolean)
+    .join(" ");
+  return RETIRED_RESPONSE_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function responsePayloadIsRetired(data) {
+  const text = [data?.answer, data?.meaning, data?.nextStep].filter(Boolean).join(" ");
+  return RETIRED_RESPONSE_PATTERNS.some(pattern => pattern.test(text));
+}
+
 function loadState() {
   try {
     const parsed = JSON.parse(storageGet(STORAGE_KEY));
-    if (!parsed || !parsed.sessionId) return freshState();
+    if (!parsed || typeof parsed !== "object") return freshState();
+
+    const base = freshState();
+    const sessionValid = validSessionId(parsed.sessionId);
     const migratedCopper = Number(parsed.copperCredits ?? parsed.paidCredits ?? 0);
+    const safeWishes = Array.isArray(parsed.wishes)
+      ? parsed.wishes.filter(record => record && typeof record.wish === "string" && typeof record.response?.answer === "string" && !isRetiredGenericResponse(record))
+      : [];
+    const safeReflections = Array.isArray(parsed.monthlyReflections)
+      ? parsed.monthlyReflections.filter(record => record && typeof record.response?.answer === "string" && !isRetiredGenericResponse(record))
+      : [];
+
     return {
-      ...freshState(),
+      ...base,
       ...parsed,
-      version: 3,
-      copperCredits: Math.max(0, migratedCopper),
-      moonCredits: Math.max(0, Number(parsed.moonCredits || 0)),
+      version: 4,
+      // A malformed legacy/local session should not leave the whole app permanently broken.
+      // Keep the readable journal, start a clean anonymous session, and let cloud sync rebuild trusted balances.
+      sessionId: sessionValid ? parsed.sessionId : base.sessionId,
+      copperCredits: sessionValid ? Math.max(0, migratedCopper) : 0,
+      moonCredits: sessionValid ? Math.max(0, Number(parsed.moonCredits || 0)) : 0,
       selectedCoin: ["daily", "copper", "moon"].includes(parsed.selectedCoin) ? parsed.selectedCoin : "daily",
-      visitDays: Array.isArray(parsed.visitDays) ? parsed.visitDays : [],
-      wishes: Array.isArray(parsed.wishes) ? parsed.wishes : [],
-      monthlyReflections: Array.isArray(parsed.monthlyReflections) ? parsed.monthlyReflections : [],
-      conversionEvents: Array.isArray(parsed.conversionEvents) ? parsed.conversionEvents : [],
-      pendingFollowUp: parsed.pendingFollowUp && typeof parsed.pendingFollowUp === "object" ? parsed.pendingFollowUp : null
+      visitDays: Array.isArray(parsed.visitDays) ? parsed.visitDays.filter(Boolean).slice(-400) : [],
+      wishes: safeWishes,
+      monthlyReflections: safeReflections,
+      conversionEvents: Array.isArray(parsed.conversionEvents) ? parsed.conversionEvents.slice(-120) : [],
+      pendingFollowUp: sessionValid && parsed.pendingFollowUp && typeof parsed.pendingFollowUp === "object" ? parsed.pendingFollowUp : null
     };
   } catch {
     return freshState();
@@ -228,7 +287,7 @@ function saveState() {
 }
 
 function refreshDailyState() {
-  const today = localDateKey();
+  const today = dailyDateKey();
   if (state.dailyRefreshDate !== today) {
     state.dailyRefreshDate = today;
     state.dailyAvailable = true;
@@ -382,6 +441,7 @@ function updateUI() {
   if (elements.moonChoiceCount) elements.moonChoiceCount.textContent = `${Math.max(0, Number(state.moonCredits || 0))} ready`;
   if (elements.followCopperBalance) elements.followCopperBalance.textContent = state.copperCredits > 0 ? `${state.copperCredits} ready` : "$2.99 · 10 Copper";
   if (elements.followMoonBalance) elements.followMoonBalance.textContent = state.moonCredits > 0 ? `${state.moonCredits} ready` : "$4.99 · 30 Moon";
+  if (elements.manageKeeperButton) elements.manageKeeperButton.hidden = !state.subscriptionActive;
   if (runtime.installPrompt) elements.installButton.hidden = state.wishes.length < 1;
   elements.totalRipples.textContent = String(state.wishes.length);
   elements.daysVisited.textContent = String(state.visitDays.length);
@@ -582,6 +642,10 @@ function proceedToPenny(wish) {
 }
 
 async function preparePenny() {
+  if (!runtime.configReady) {
+    showToast("The well is still waking up. Give it a second and try again.");
+    return;
+  }
   const wish = elements.wishInput.value.trim();
   if (wish.length < 3) {
     showToast("Give the well a little more to listen to.");
@@ -748,115 +812,33 @@ function clientSafetyResponse(wish) {
   return null;
 }
 
-function clientFallbackResponse(wish, { deep = false } = {}) {
-  const text = wish.toLowerCase();
-  const isWork = /business|work|job|customer|client|money|income|success/.test(text);
-  const isLove = /love|relationship|partner|marriage|husband|wife/.test(text);
-  const isChange = /change|move|start|leave|decision|new/.test(text);
-  if (isWork) return {
-    answer: "The water does not hear a lack of effort. It hears your energy dividing itself among too many currents. One direction may need your full weight before it can carry you forward.",
-    meaning: "This wish may be asking for traction more than luck. A smaller result you can repeat could matter more than one dramatic breakthrough.",
-    nextStep: "Choose the one task most likely to create a real result and give it one uninterrupted hour.",
-    shareLine: "One clear current can carry more than ten scattered ones.",
-    followUpQuestion: "Which direction created the strongest ripple?",
-    mood: "steady",
-    theme: "work",
-    source: "offline"
-  };
-  if (isLove) return {
-    answer: "The well hears a wish to be met, not merely noticed. Water cannot force two shores together, but it can reveal where you have been crossing too far alone.",
-    meaning: "Underneath this wish may be a need for honesty, safety, and care that is returned. That need deserves to be named plainly.",
-    nextStep: "Write down one honest thing you need from this connection before deciding how to express it.",
-    shareLine: "The right closeness should not require you to disappear.",
-    followUpQuestion: "Do you feel more seen than you did when you made this wish?",
-    mood: "tender",
-    theme: "love",
-    source: "offline"
-  };
-  if (isChange) return {
-    answer: "The wish sinks, but the ripple moves outward. Part of you may already know the old shape no longer fits, even while the new one remains unclear.",
-    meaning: "You may be waiting for certainty before beginning. The next useful step may simply be one that gives you better information.",
-    nextStep: "Take one reversible step that moves you closer without requiring a final decision.",
-    shareLine: "You do not need the whole map to honor the direction.",
-    followUpQuestion: "What became clearer after you moved one step?",
-    mood: "brave",
-    theme: "change",
-    source: "offline"
-  };
-  return {
-    answer: "The penny disappears, but the wish does not. It settles beneath the noise where the truest part of it can finally be heard.",
-    meaning: "This may be less a request for a miracle than an honest admission that something matters deeply to you. Giving it words is already movement.",
-    nextStep: "Complete this sentence: ‘The part I can influence is…’ and act on what follows.",
-    shareLine: "Some answers begin when the wish is finally spoken plainly.",
-    followUpQuestion: "What has shifted since you placed this wish in the water?",
-    mood: "moonlit",
-    theme: "uncertainty",
-    source: "offline"
-  };
-}
-
-function deepenFallback(response) {
-  if (!response) return response;
-  return {
-    ...response,
-    answer: `${response.answer} Beneath that first echo, the well also hears a question about what you are willing to choose, protect, or release so the wish has room to become real.`,
-    meaning: `${response.meaning} The repeated feeling underneath it may be the useful clue: it points toward the need that deserves a clearer boundary or a more deliberate commitment.`,
-    nextStep: `${response.nextStep} Then write one sentence about what you will stop giving energy to while you do it.`,
-    source: `${response.source || "offline"}-deep`
-  };
-}
-
-function moonifyFallback(response) {
-  const deep = deepenFallback(response);
-  return {
-    ...deep,
-    answer: `${deep.answer} In moonlight, the deeper question is what would change if you stopped carrying this wish in the same familiar way.`,
-    meaning: `${deep.meaning} Try asking what the wish is attempting to protect, not only what it is attempting to obtain.`,
-    nextStep: `${deep.nextStep} Before the day ends, complete one sentence beginning with “For the next seven days, I will…”`,
-    followUpQuestion: "What looked different once you stopped carrying the wish in the old way?",
-    mood: "moonlit",
-    source: `${deep.source || "offline"}-moon`
-  };
-}
-
-
-function followUpFallback(response, followUp, coinSource) {
-  const question = String(followUp?.question || "What should I notice next?").trim();
-  const direction = String(followUp?.direction || "clarity");
-  const directionLine = direction === "action"
-    ? "The useful answer is likely hiding in the first step that creates evidence, not the step that tries to solve everything."
-    : direction === "release"
-      ? "The weight may not be the wish itself, but the expectation that you must control every part of how it turns out."
-      : "The overlooked part may be the difference between what you deeply want and what you are currently able to influence.";
-  const base = coinSource === "moon" ? moonifyFallback(response) : deepenFallback(response);
-  return {
-    ...base,
-    answer: `${base.answer} Your follow-up asks, “${question.slice(0, 120)}” ${directionLine}`,
-    meaning: `${base.meaning} Keep the answer tied to the part of the wish that is concrete enough to name and small enough to act on.`,
-    nextStep: direction === "action"
-      ? "Write the smallest action that would create new information within 48 hours, then schedule it."
-      : direction === "release"
-        ? "Write down what is yours to carry and what is not, then choose one thing from the second list to stop rehearsing today."
-        : "Name one assumption you are making about this wish and find one way to test it gently.",
-    followUpQuestion: "What became clearer after you answered the question beneath the question?",
-    source: `${base.source || "offline"}-follow-up`
-  };
-}
-
 async function requestWishResponse(wish, coinIntent, followUp = null) {
   const response = await fetch("/api/wish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       sessionId: state.sessionId,
+      clientVersion: CLIENT_VERSION,
       wish,
-      priorContext: priorContext(followUp?.parentId || null),
+      // Keep everyday answers anchored to the wish in front of the person.
+      // Moon is the only mode allowed to notice a relevant pattern from recent saved wishes.
+      priorContext: coinIntent === "moon" ? priorContext(followUp?.parentId || null) : [],
       clarification: followUp ? "" : runtime.wishClarification,
       coinIntent,
       followUp
     })
   });
   const data = await response.json().catch(() => ({}));
+  if (response.ok && data.responseVersion && data.responseVersion !== CLIENT_VERSION) {
+    const error = new Error("A newer version of the well is ready. Refresh once and try your wish again.");
+    error.code = "APP_UPDATE_REQUIRED";
+    throw error;
+  }
+  if (response.ok && (!data.responseVersion || responsePayloadIsRetired(data))) {
+    const error = new Error("The well caught an outdated response. Your penny was not used. Refresh once and try again.");
+    error.code = "STALE_RESPONSE";
+    throw error;
+  }
   if (!response.ok) {
     const error = new Error(data.error || "The well went quiet.");
     error.code = data.code;
@@ -888,17 +870,11 @@ async function tossPenny() {
   const started = Date.now();
   const followUpContext = runtime.followUpContext ? { ...runtime.followUpContext } : null;
   const responsePromise = requestWishResponse(runtime.currentWish, localCoinSource, followUpContext).catch(error => {
-    if (error.code === "NO_COIN") throw error;
-    const localDevelopment = ["localhost", "127.0.0.1"].includes(location.hostname);
-    if (runtime.config.ai || !localDevelopment) throw error;
-    console.warn("Using offline development response:", error);
+    // Safety guidance may still render if the network is unavailable, but normal
+    // wishes never fall back to canned or generic responses.
     const safety = clientSafetyResponse(runtime.currentWish);
-    const fallback = clientFallbackResponse(runtime.currentWish);
     if (safety) return safety;
-    if (followUpContext) return followUpFallback(fallback, followUpContext, localCoinSource);
-    return localCoinSource === "moon"
-      ? moonifyFallback(fallback)
-      : localCoinSource === "copper" ? deepenFallback(fallback) : fallback;
+    throw error;
   });
 
   await animateToss();
@@ -960,12 +936,19 @@ async function tossPenny() {
     updateUI();
   } catch (error) {
     restoreLocalCoin(localCoinSource);
-    updateUI();
+    if (error.code === "NO_COIN" && runtime.config.database) {
+      await syncCloudState();
+    } else {
+      updateUI();
+    }
     elements.listeningState.hidden = true;
     elements.waterSurface.classList.remove("listening", "active");
     elements.appShell.classList.remove("tossing");
     elements.coinDock.hidden = false;
-    showToast(error.message || "The well went quiet. Your penny was returned.", 3500);
+    showToast(error.code === "NO_COIN"
+      ? "That penny was already used. Your well has been refreshed."
+      : (error.message || "The well went quiet. Your penny was returned."), 3800);
+    if (error.code === "NO_COIN" && !availablePennies()) setTimeout(() => openOverlay(elements.pennyModal), 420);
     runtime.busy = false;
   }
 }
@@ -984,10 +967,10 @@ function showResponse(record) {
   if (elements.moonNoteText) elements.moonNoteText.textContent = record.response.moonNote || "";
   if (elements.moonNoteCard) elements.moonNoteCard.hidden = !(isMoon && record.response.moonNote);
   elements.responseModeLabel.textContent = isFreeContinuation
-    ? "A clearer echo"
+    ? "Your follow-up answer"
     : isFollowUp
-      ? (isMoon ? "A Moon Water continuation" : "A deeper echo")
-      : isMoon ? "A Moon Water echo" : isCopper ? "A Deep Water echo" : "The water answers";
+      ? (isMoon ? "Your Moon Water answer" : "Your deeper answer")
+      : isMoon ? "Your Moon Water answer" : isCopper ? "Your Deep Water answer" : "The well’s answer";
   elements.responseInsight.open = Boolean(isPremium || isFollowUp);
   elements.responseMore.open = false;
   elements.responseCard.classList.toggle("deep-water-response", isPremium);
@@ -1020,9 +1003,9 @@ function showResponse(record) {
   if (elements.premiumUpgradeActions) elements.premiumUpgradeActions.hidden = true;
   if (elements.upgradeButton) elements.upgradeButton.hidden = false;
   if (showUpgrade && canUseFreeFollowUp) {
-    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "Prove it understood you";
+    if (elements.upgradeEyebrow) elements.upgradeEyebrow.textContent = "One more question";
     elements.upgradeTitle.textContent = "Your first follow-up is free";
-    elements.upgradeText.textContent = "Ask the question that came up while reading this. The well keeps the same wish and answer in context.";
+    elements.upgradeText.textContent = "Ask what came up while you were reading. The well stays with this same wish instead of starting over.";
     elements.upgradeButton.textContent = "Ask my free follow-up";
     trackEvent("free_follow_up_offer_viewed", { theme: record.response.theme, firstWish: state.wishes.length <= 1 });
   } else if (showUpgrade) {
@@ -1264,15 +1247,25 @@ function openShare() {
 async function shareCard() {
   if (!runtime.currentRecord) return;
   const blob = await canvasBlob();
-  const file = new File([blob], "the-listening-well.png", { type: "image/png" });
+  if (!blob) {
+    showToast("The share card could not be made on this device.");
+    return;
+  }
+  let file = null;
+  try {
+    if (typeof File === "function") file = new File([blob], "throw-a-penny-echo.png", { type: "image/png" });
+  } catch {
+    file = null;
+  }
   const shareData = {
     title: SHARE_NAME,
     text: `The well told me: “${runtime.currentRecord.response.shareLine}”`,
     url: location.origin,
-    files: [file]
+    ...(file ? { files: [file] } : {})
   };
   try {
-    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    const canShareFile = Boolean(file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] })));
+    if (canShareFile) {
       await navigator.share(shareData);
       runtime.currentRecord.sharedAt = new Date().toISOString();
       trackEvent("echo_shared", { coin: runtime.currentRecord.coinSource, theme: runtime.currentRecord.response.theme });
@@ -1282,7 +1275,7 @@ async function shareCard() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "the-listening-well.png";
+      anchor.download = "throw-a-penny-echo.png";
       anchor.click();
       URL.revokeObjectURL(url);
       showToast("Share card saved. Your wish was not included.");
@@ -1617,9 +1610,16 @@ async function startCheckout(pack) {
     saveState();
   }
   trackEvent("checkout_started", { pack, source: state.pendingFollowUp ? "follow_up" : runtime.currentRecord ? "response" : "penny_menu" });
+  if (!runtime.persistentStorage) {
+    elements.paymentNote.hidden = false;
+    elements.paymentNote.textContent = "Paid pennies can’t be saved in this browser right now. Your free penny still works.";
+    showToast("Paid pennies can’t be saved in this browser right now.", 4200);
+    return;
+  }
   if (!runtime.config.payments) {
-    elements.paymentNote.textContent = "The payment flow is built and waiting for Stripe price IDs and a secret key.";
-    showToast("Payments are ready for Stripe keys, but not connected yet.");
+    elements.paymentNote.hidden = false;
+    elements.paymentNote.textContent = "Purchases are temporarily unavailable. Your free daily penny still works.";
+    showToast("Purchases are temporarily unavailable. Please try again a little later.");
     return;
   }
   const target = document.querySelector(`[data-pack="${pack}"]`);
@@ -1642,6 +1642,39 @@ async function startCheckout(pack) {
   }
 }
 
+async function cancelWellKeeper() {
+  if (!state.subscriptionActive) return;
+  const confirmed = window.confirm("Cancel Well Keeper so it will not renew again? Your existing Moon pennies will stay in your well.");
+  if (!confirmed) return;
+  const button = elements.manageKeeperButton;
+  const original = button?.textContent || "Cancel Well Keeper";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Canceling…";
+  }
+  try {
+    const response = await fetch("/api/cancel-keeper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: state.sessionId })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.cancelled !== true) throw new Error(data.error || "Well Keeper could not be canceled.");
+    state.subscriptionActive = false;
+    saveState();
+    updateUI();
+    showToast(data.endsAt
+      ? `Well Keeper will end on ${formatDate(data.endsAt, true)}. Your Moon pennies stay yours.`
+      : "Well Keeper will not renew again. Your Moon pennies stay yours.", 5600);
+  } catch (error) {
+    showToast(error.message || "Well Keeper could not be canceled. Please try again later.", 4800);
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+}
+
 async function syncCloudState() {
   if (!runtime.config.database) return false;
   try {
@@ -1658,11 +1691,13 @@ async function syncCloudState() {
       state.copperCredits = Number(profile.copper_credits || 0);
       state.moonCredits = Number(profile.moon_credits || 0);
       state.subscriptionActive = Boolean(profile.subscription_active);
-      state.dailyAvailable = profile.daily_claim_date !== localDateKey();
+      state.dailyAvailable = profile.daily_claim_date !== dailyDateKey();
     }
     if (Array.isArray(data.wishes) && data.wishes.length) {
       const existingCloudIds = new Set(state.wishes.map(record => record.cloudId).filter(Boolean));
       for (const cloud of data.wishes.reverse()) {
+        const cloudPreview = { response: { answer: cloud.answer, meaning: cloud.meaning, nextStep: cloud.next_step } };
+        if (isRetiredGenericResponse(cloudPreview)) continue;
         if (existingCloudIds.has(cloud.id)) continue;
         const likelyMatch = state.wishes.find(record => !record.cloudId && Math.abs(new Date(record.createdAt).getTime() - new Date(cloud.created_at).getTime()) < 120000 && record.wish === cloud.wish_text);
         if (likelyMatch) {
@@ -1719,6 +1754,8 @@ async function syncCloudState() {
     if (Array.isArray(data.monthlyReflections) && data.monthlyReflections.length) {
       const existingReflectionIds = new Set(state.monthlyReflections.map(record => record.cloudId).filter(Boolean));
       for (const cloud of data.monthlyReflections.reverse()) {
+        const cloudPreview = { response: { answer: cloud.answer, meaning: cloud.meaning, nextStep: cloud.next_step } };
+        if (isRetiredGenericResponse(cloudPreview)) continue;
         if (existingReflectionIds.has(cloud.id)) continue;
         const likelyMatch = state.monthlyReflections.find(record => (record.monthKey || monthKey(record.createdAt)) === cloud.month_key);
         if (likelyMatch) {
@@ -1758,12 +1795,37 @@ async function loadConfig() {
   try {
     const response = await fetch("/api/config", { cache: "no-store" });
     runtime.config = await response.json();
-    elements.paymentNote.textContent = runtime.config.payments
-      ? "Secure Stripe checkout. Paid pennies are saved to this browser’s private well after payment is confirmed."
-      : "Payments stay in preview until both Supabase and Stripe are connected.";
+    if (runtime.config.version !== CLIENT_VERSION) {
+      const targetVersion = String(runtime.config.version || "server-update");
+      const alreadyRefreshed = sessionStorage.getItem("throwapenny-version-refresh") === targetVersion;
+      if (!alreadyRefreshed) {
+        sessionStorage.setItem("throwapenny-version-refresh", targetVersion);
+        try {
+          const registrations = await navigator.serviceWorker?.getRegistrations?.();
+          await Promise.all((registrations || []).map(registration => registration.unregister()));
+          const keys = await caches?.keys?.();
+          await Promise.all((keys || []).map(key => caches.delete(key)));
+        } catch {}
+        location.replace(`/?refresh=${Date.now()}`);
+        return false;
+      }
+      runtime.configReady = false;
+      showToast("The latest well update is still loading. Refresh once more in a few seconds.", 5000);
+      return false;
+    }
+    sessionStorage.removeItem("throwapenny-version-refresh");
+    runtime.configReady = true;
+    const purchasesReady = Boolean(runtime.config.payments && runtime.persistentStorage);
+    elements.paymentNote.hidden = purchasesReady;
+    elements.paymentNote.textContent = purchasesReady
+      ? ""
+      : runtime.persistentStorage
+        ? "Purchases are temporarily unavailable. Your free daily penny still works."
+        : "Paid pennies can’t be saved in this browser right now. Your free penny still works.";
     await syncCloudState();
   } catch {
-    runtime.config = { ai: false, database: false, payments: false };
+    runtime.config = { ai: false, database: false, payments: false, version: null };
+    runtime.configReady = false;
   }
 }
 
@@ -1792,78 +1854,129 @@ function exportJournal() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `listening-well-journal-${localDateKey()}.json`;
+  anchor.download = `throw-a-penny-journal-${localDateKey()}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
   showToast("Your private journal export is ready.");
 }
 
 async function clearDevice() {
-  const confirmed = window.confirm("Clear every wish and setting saved on this device? This cannot be undone.");
+  const confirmed = window.confirm("Clear every wish, penny balance, and setting saved for this browser? This cannot be undone.");
   if (!confirmed) return;
+
   const sessionId = state.sessionId;
   if (runtime.config.database) {
     try {
-      await fetch("/api/delete-session", {
+      const response = await fetch("/api/delete-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId })
       });
-    } catch {
-      showToast("Local data was cleared, but the cloud deletion could not be confirmed.", 4200);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.deleted !== true) {
+        throw new Error(data.error || "Deletion could not be confirmed");
+      }
+    } catch (error) {
+      console.warn("Saved journal deletion could not be confirmed:", error);
+      showToast("Nothing was cleared because we could not confirm the saved copy was removed. Please try again in a moment.", 5600);
+      return;
     }
   }
+
   storageRemove(STORAGE_KEY);
   state = freshState();
   saveState();
   closeOverlay(elements.journalDrawer);
   resetExperience();
   updateUI();
-  showToast("This device has been cleared.");
+  showToast("Your saved well has been cleared.");
 }
 
 async function confirmPurchasedCredits(startingWallet, expectedCoin = null) {
-  const delays = [900, 1800, 3200, 5200, 8000];
-  for (const delay of delays) {
+  const detectDelivery = () => {
+    const copperAdded = Number(state.copperCredits || 0) - Number(startingWallet.copper || 0);
+    const moonAdded = Number(state.moonCredits || 0) - Number(startingWallet.moon || 0);
+    if (copperAdded <= 0 && moonAdded <= 0) return null;
+    const deliveredCoin = moonAdded > 0 ? "moon" : "copper";
+    const added = Math.max(moonAdded, copperAdded);
+    return { added, deliveredCoin };
+  };
+
+  // The webhook may finish while the customer is still on Checkout. In that case
+  // loadConfig() has already synced the new balance before this function starts.
+  let delivered = detectDelivery();
+  if (delivered) {
+    trackEvent("credits_delivered", { added: delivered.added, coin: delivered.deliveredCoin, expectedCoin, timing: "before_return_check" });
+    showToast(`${delivered.added} ${delivered.deliveredCoin} pennies are ready.`, 3800);
+    resumePendingFollowUp(delivered.deliveredCoin);
+    return true;
+  }
+
+  for (const delay of PURCHASE_CONFIRMATION_DELAYS_MS) {
     await new Promise(resolve => setTimeout(resolve, delay));
     await syncCloudState();
-    const copperAdded = state.copperCredits - startingWallet.copper;
-    const moonAdded = state.moonCredits - startingWallet.moon;
-    if (copperAdded > 0 || moonAdded > 0) {
-      const deliveredCoin = moonAdded > 0 ? "moon" : "copper";
-      const added = Math.max(moonAdded, copperAdded);
-      trackEvent("credits_delivered", { added, coin: deliveredCoin, expectedCoin });
-      showToast(`${added} ${deliveredCoin} pennies are ready.`, 3800);
-      resumePendingFollowUp(deliveredCoin);
+    delivered = detectDelivery();
+    if (delivered) {
+      trackEvent("credits_delivered", { added: delivered.added, coin: delivered.deliveredCoin, expectedCoin, timing: "after_return_poll" });
+      showToast(`${delivered.added} ${delivered.deliveredCoin} pennies are ready.`, 3800);
+      resumePendingFollowUp(delivered.deliveredCoin);
       return true;
     }
   }
-  showToast("Stripe is still confirming your pennies. The webhook log in Admin will show the result.", 5600);
+
+  showToast("Your payment was received, but the pennies are taking longer than usual to arrive. Refresh in a moment and they should appear automatically.", 6200);
   return false;
 }
 
-function handlePaymentReturn() {
+function readPaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const payment = params.get("payment");
-  if (!payment) return;
+  if (!payment) return null;
   const pack = params.get("pack");
   const expectedCoin = pack === "moon_30" || pack === "keeper_monthly" ? "moon" : pack === "copper_10" ? "copper" : null;
+  return { payment, pack, expectedCoin };
+}
+
+async function handlePaymentReturn(paymentReturn, startingWallet) {
+  if (!paymentReturn) return false;
+  const { payment, pack, expectedCoin } = paymentReturn;
   history.replaceState({}, "", window.location.pathname);
+
   if (payment === "success") {
-    const startingWallet = { copper: Number(state.copperCredits || 0), moon: Number(state.moonCredits || 0) };
     trackEvent("checkout_returned_success", { pack, expectedCoin });
-    showToast(`Stripe is confirming your ${expectedCoin || "purchased"} pennies.`, 3800);
-    confirmPurchasedCredits(startingWallet, expectedCoin);
-  } else if (payment === "cancelled") {
+    const alreadyDelivered = (Number(state.copperCredits || 0) > Number(startingWallet.copper || 0))
+      || (Number(state.moonCredits || 0) > Number(startingWallet.moon || 0));
+    if (!alreadyDelivered) showToast("Payment received. Adding your pennies now…", 3200);
+    await confirmPurchasedCredits(startingWallet, expectedCoin);
+    return true;
+  }
+
+  if (payment === "cancelled") {
     trackEvent("checkout_cancelled", { source: state.pendingFollowUp ? "follow_up" : "wallet" });
     showToast(state.pendingFollowUp
       ? "Nothing was charged. Your follow-up is still waiting when you are ready."
       : "Nothing was charged. Your available pennies are still here.");
+    return true;
   }
+
+  return false;
 }
 
 function registerPWA() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    const wasControlled = Boolean(navigator.serviceWorker.controller);
+    let reloadingForUpdate = false;
+    if (wasControlled) {
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloadingForUpdate) return;
+        reloadingForUpdate = true;
+        window.location.reload();
+      });
+    }
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+      .then(registration => registration.update().catch(() => {}))
+      .catch(() => {});
+  }
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     runtime.installPrompt = event;
@@ -1988,6 +2101,7 @@ function bindEvents() {
   elements.continueMoonButton.addEventListener("click", () => beginFollowUp("moon"));
   elements.giftFromResponseButton.addEventListener("click", shareGiftPenny);
   elements.giftButton.addEventListener("click", shareGiftPenny);
+  elements.manageKeeperButton?.addEventListener("click", cancelWellKeeper);
   elements.monthlyButton.addEventListener("click", createMonthlyReflection);
   elements.nativeShareButton.addEventListener("click", shareCard);
   elements.copyShareButton.addEventListener("click", copyShareWords);
@@ -2043,11 +2157,23 @@ async function init() {
   refreshDailyState();
   seedSky();
   bindEvents();
+  elements.readyButton.disabled = true;
   updateUI();
   registerPWA();
+
+  // Capture the browser wallet before cloud sync. A successful webhook can update
+  // Supabase while the customer is still on Checkout, so this baseline is needed
+  // to recognize credits that already arrived before the return page loaded.
+  const paymentReturn = readPaymentReturn();
+  const walletBeforeSync = {
+    copper: Number(state.copperCredits || 0),
+    moon: Number(state.moonCredits || 0)
+  };
+
   await loadConfig();
-  handlePaymentReturn();
-  if (!new URLSearchParams(window.location.search).get("payment")) resumePendingFollowUp();
+  elements.readyButton.disabled = !runtime.configReady;
+  const handledPaymentReturn = await handlePaymentReturn(paymentReturn, walletBeforeSync);
+  if (!handledPaymentReturn) resumePendingFollowUp();
 }
 
 init();

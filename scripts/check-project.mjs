@@ -27,12 +27,19 @@ function signedStripeRequest(event, secret) {
   const raw = Buffer.from(JSON.stringify(event));
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = crypto.createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
-  return request({
+  const req = {
     method: "POST",
     url: "/api/stripe-webhook",
     headers: { "stripe-signature": `t=${timestamp},v1=${signature}` },
-    body: raw
+    socket: { remoteAddress: "127.0.0.1" },
+    async *[Symbol.asyncIterator]() { yield raw; }
+  };
+  // Simulate Vercel's lazy body helper. Stripe verification must never access it.
+  Object.defineProperty(req, "body", {
+    configurable: true,
+    get() { throw new Error("Webhook touched parsed req.body before reading raw bytes"); }
   });
+  return req;
 }
 
 async function syntaxCheck() {
@@ -74,6 +81,38 @@ async function staticAudit() {
   for (const name of ["setup", "login", "logout", "me", "dashboard", "grant"]) {
     assert.equal(routeMap.get(`/api/admin/${name}`), `/api/admin-${name}.js`, `Missing Vercel route for admin ${name}`);
   }
+
+  const privacy = await read("public/privacy.html");
+  const terms = await read("public/terms.html");
+  const robots = await read("public/robots.txt");
+  const wishApi = await read("api/wish.js");
+  const core = await read("lib/well-core.js");
+  assert.ok(!/localWishResponse/.test(wishApi), "Wish API must never substitute a canned local response");
+  assert.ok(!/clientFallbackResponse/.test(app), "Browser must never substitute a canned normal wish response");
+  assert.ok(!/export function localWishResponse/.test(core), "Canned server wish-response bank must stay removed");
+  const customerSurface = `${index}\n${app}\n${privacy}\n${terms}`;
+  for (const forbidden of [
+    /Connect Supabase/i,
+    /Stripe price IDs/i,
+    /webhook log in Admin/i,
+    /API keys are never exposed/i,
+    /Account-based storage can be added later/i,
+    /Payments are ready for keys/i,
+    /good enough to keep/i
+  ]) {
+    assert.ok(!forbidden.test(customerSurface), `Customer-facing implementation copy leaked: ${forbidden}`);
+  }
+  assert.match(admin, /noindex,nofollow,noarchive/i, "Admin page must not be indexable");
+  assert.match(robots, /Disallow: \/admin\.html/, "robots.txt should keep the admin page out of crawl paths");
+  assert.match(index, /Throw a Penny \| A Digital Wishing Well/, "Public title should describe the experience rather than the implementation");
+  assert.match(index, /id="manageKeeperButton"/, "Well Keeper needs a customer-visible management path");
+  assert.match(app, /function dailyDateKey/, "Daily penny client date must align with the server date boundary");
+  assert.match(app, /Nothing was cleared because we could not confirm the saved copy was removed/, "Journal deletion must fail safely if cloud deletion cannot be confirmed");
+  assert.match(app, /navigator\.serviceWorker\.addEventListener\("controllerchange"/, "Existing PWA sessions should reload when a new service worker takes control");
+  for (const asset of ["/", "/sw.js", "/app.js", "/styles.css"]) {
+    const route = vercel.routes.find(candidate => candidate.src === asset);
+    assert.match(String(route?.headers?.["Cache-Control"] || ""), /max-age=0/, `${asset} must revalidate so customers do not stay on stale releases`);
+  }
   return { indexIds: indexSet.size, adminIds: adminSet.size };
 }
 
@@ -110,11 +149,36 @@ async function openAIAudit() {
         })
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    const input = String(payload?.input || "");
+    const response = /sister/i.test(input)
+      ? {
+          answer: "You want conversations with your sister to stop turning into arguments, not simply to prove who is right.",
+          meaning: "The relationship matters enough that the repeated conflict is becoming the real problem.",
+          nextStep: "Choose one recent argument and identify the exact point where the conversation changed tone.",
+          shareLine: "Sometimes changing the pattern matters more than winning the point.",
+          followUpQuestion: "What usually happens just before the argument starts?",
+          moonNote: null, mood: "steady", theme: "family"
+        }
+      : /business/i.test(input)
+        ? {
+            answer: "You want your business to feel dependable enough that income is not a fresh question every month.",
+            meaning: "The useful issue is repeatability, not abstract growth.",
+            nextStep: "Look at the last five customers and identify the one source you could deliberately repeat this week.",
+            shareLine: "Dependable work is built from what can be repeated.",
+            followUpQuestion: "Which source of work has repeated most reliably?",
+            moonNote: null, mood: "steady", theme: "work"
+          }
+        : {
+            answer: "You are wishing for change, so the useful question is what you want to be different rather than change for its own sake.",
+            meaning: "A clearer target will make the wish easier to act on.",
+            nextStep: "Name the one part of your current situation you most want changed.",
+            shareLine: "Change gets clearer when you name what must be different.",
+            followUpQuestion: "What would you notice first if the change happened?",
+            moonNote: "If the change comes, notice which part came from your choice and which part came from circumstance.",
+            mood: "moonlit", theme: "change"
+          };
     return new Response(JSON.stringify({
-      output_text: JSON.stringify({
-        answer: "A moon answer.", meaning: "A useful meaning.", nextStep: "Take one step.",
-        shareLine: "A strong private share line.", followUpQuestion: "What changed?", mood: "moonlit", theme: "change"
-      })
+      output_text: JSON.stringify(response)
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
@@ -219,7 +283,7 @@ async function qualityRetryAudit() {
       model: "gpt-5"
     });
     assert.equal(responseCalls, 2, "A failed quality review did not trigger one regeneration");
-    assert.equal(qualityCalls, 2, "The regenerated answer was not quality-checked before being shown");
+    assert.equal(qualityCalls, 1, "A weak first draft should be reviewed once before one focused rewrite");
     assert.match(result.answer, /repeat customers/i);
   } finally {
     globalThis.fetch = originalFetch;
@@ -269,10 +333,11 @@ async function qualityHardStopAudit() {
         apiKey: "test",
         model: "gpt-5"
       }),
-      error => error?.code === "WELL_RESPONSE_QUALITY"
+      error => error?.code === "RESPONSE_TOO_GENERIC",
+      "A second canned draft must be rejected instead of shown to the customer"
     );
-    assert.equal(responseCalls, 2, "The quality gate should allow one regeneration before refusing a weak response");
-    assert.equal(qualityCalls, 2, "Both generated drafts should be quality reviewed before the hard stop");
+    assert.equal(responseCalls, 2, "A weak first draft should still trigger one regeneration");
+    assert.equal(qualityCalls, 1, "The editor should run once; the corrected structured rewrite should not add a second latency-heavy review");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -281,7 +346,7 @@ async function qualityHardStopAudit() {
 async function freeFollowUpAudit() {
   process.env.SUPABASE_URL = "https://project.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
-  delete process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test";
   const { default: handler } = await import("../api/wish.js");
   const originalFetch = globalThis.fetch;
   const sessionId = "33333333-3333-4333-8333-333333333333";
@@ -291,6 +356,25 @@ async function freeFollowUpAudit() {
 
   globalThis.fetch = async (url, options = {}) => {
     const value = String(url);
+    if (value.includes("api.openai.com/v1/moderations")) {
+      return new Response(JSON.stringify({ results: [{ flagged: false, categories: {} }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.includes("api.openai.com/v1/responses")) {
+      const payload = JSON.parse(options.body || "{}");
+      if (payload?.text?.format?.name === "well_quality") {
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          specificity: 5, directness: 5, grounding: 5, usefulness: 5, genericRisk: false, inventedDetails: false, critique: "Specific."
+        }) }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        answer: "You want conversations with your sister to stop becoming arguments, and the useful place to look is what happens immediately before the tone changes.",
+        meaning: "This is about changing a repeated conversation pattern while protecting a relationship you still care about.",
+        nextStep: "Think of the last argument with your sister and write down the sentence or topic that changed the tone.",
+        shareLine: "Changing the pattern can matter more than winning the point.",
+        followUpQuestion: "What usually happens right before the argument starts?",
+        moonNote: null, mood: "steady", theme: "family"
+      }) }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     seen.push({ url: value, method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
     if (value.includes("/rest/v1/wishes?id=eq.") && (options.method || "GET") === "GET") {
       return new Response(JSON.stringify([{ id: parentId }]), { status: 200, headers: { "content-type": "application/json" } });
@@ -309,6 +393,7 @@ async function freeFollowUpAudit() {
 
   const body = {
     sessionId,
+    clientVersion: "1.7.3",
     wish: "I wish my sister and I could talk without every conversation becoming an argument",
     coinIntent: "free",
     followUp: {
@@ -337,6 +422,7 @@ async function freeFollowUpAudit() {
     assert.equal(duplicate.json().code, "FREE_FOLLOW_UP_USED");
   } finally {
     globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
   }
 }
 
@@ -507,12 +593,32 @@ async function adminSetupAudit() {
 async function refundAudit() {
   process.env.SUPABASE_URL = "https://project.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
-  delete process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test";
   const { default: handler } = await import("../api/wish.js");
   const originalFetch = globalThis.fetch;
   const rpcNames = [];
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, options = {}) => {
     const value = String(url);
+    if (value.includes("api.openai.com/v1/moderations")) {
+      return new Response(JSON.stringify({ results: [{ flagged: false, categories: {} }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.includes("api.openai.com/v1/responses")) {
+      const payload = JSON.parse(options.body || "{}");
+      if (payload?.text?.format?.name === "well_quality") {
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          specificity: 5, directness: 5, grounding: 5, usefulness: 5, genericRisk: false, inventedDetails: false, critique: "Specific."
+        }) }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        answer: "You want a fresh start, and the useful part is identifying which part of your current situation you most need to leave behind.",
+        meaning: "A fresh start becomes concrete when you name what must actually be different.",
+        nextStep: "Write down the first visible difference you would expect from that fresh start and one action that could create it.",
+        shareLine: "A fresh start becomes real when you can name what must change.",
+        followUpQuestion: "What would feel different first?",
+        moonNote: "A fresh start does not require erasing what came before. It does require deciding what you will not carry forward unchanged.",
+        mood: "brave", theme: "change"
+      }) }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     const rpcMatch = value.match(/\/rpc\/([^?]+)/);
     if (rpcMatch) {
       const name = rpcMatch[1];
@@ -530,12 +636,84 @@ async function refundAudit() {
     await handler(request({
       method: "POST",
       headers: { "x-forwarded-for": "192.0.2.10" },
-      body: { sessionId: "33333333-3333-4333-8333-333333333333", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
+      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.3", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
     }), res);
     assert.equal(res.statusCode, 500);
     assert.ok(rpcNames.includes("restore_well_coin"), "Consumed coin was not restored after persistence failure");
   } finally {
     console.error = originalError;
+    globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
+  }
+}
+
+
+async function cancelKeeperAudit() {
+  process.env.SUPABASE_URL = "https://project.supabase.co";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+  process.env.STRIPE_SECRET_KEY = "sk_test_example";
+  process.env.STRIPE_PRICE_KEEPER_MONTHLY = "price_keeper";
+  const { default: handler } = await import("../api/cancel-keeper.js");
+  const originalFetch = globalThis.fetch;
+  const sessionId = "77777777-7777-4777-8777-777777777777";
+  const seen = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    seen.push({ url: value, method: options.method || "GET", body: options.body });
+    if (value.includes("/rest/v1/well_profiles?")) {
+      return new Response(JSON.stringify([{ stripe_customer_id: "cus_keeper", subscription_active: true }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.includes("api.stripe.com/v1/subscriptions?") && (options.method || "GET") === "GET") {
+      return new Response(JSON.stringify({ data: [{
+        id: "sub_keeper", status: "active", cancel_at_period_end: false, current_period_end: 1780000000,
+        items: { data: [{ price: { id: "price_keeper" } }] }
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.endsWith("api.stripe.com/v1/subscriptions/sub_keeper") && options.method === "POST") {
+      const form = new URLSearchParams(options.body);
+      assert.equal(form.get("cancel_at_period_end"), "true");
+      return new Response(JSON.stringify({ id: "sub_keeper", cancel_at_period_end: true, current_period_end: 1780000000 }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.endsWith("/rest/v1/rpc/set_well_subscription")) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.p_active, false);
+      assert.equal(body.p_session_id, sessionId);
+      return new Response(JSON.stringify({ updated: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected fetch in cancel keeper test: ${value}`);
+  };
+  try {
+    const res = responseRecorder();
+    await handler(request({ method: "POST", body: { sessionId } }), res);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().cancelled, true);
+    assert.ok(seen.some(call => call.url.endsWith("api.stripe.com/v1/subscriptions/sub_keeper")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function deleteSessionAudit() {
+  process.env.SUPABASE_URL = "https://project.supabase.co";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+  const { default: handler } = await import("../api/delete-session.js");
+  const originalFetch = globalThis.fetch;
+  const sessionId = "88888888-8888-4888-8888-888888888888";
+  let deleted = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes(`/rest/v1/well_profiles?session_id=eq.${sessionId}`) && options.method === "DELETE") {
+      deleted = true;
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`Unexpected fetch in delete-session test: ${url}`);
+  };
+  try {
+    const res = responseRecorder();
+    await handler(request({ method: "POST", body: { sessionId } }), res);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().deleted, true);
+    assert.equal(deleted, true);
+  } finally {
     globalThis.fetch = originalFetch;
   }
 }
@@ -567,7 +745,9 @@ await freeFollowUpAudit();
 await checkoutAudit();
 await stripeCatalogAudit();
 await webhookAudit();
+await cancelKeeperAudit();
 await adminSetupAudit();
 await refundAudit();
+await deleteSessionAudit();
 await sqlAudit();
 console.log(JSON.stringify({ ok: true, ...results }, null, 2));

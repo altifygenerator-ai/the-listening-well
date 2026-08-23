@@ -1,5 +1,4 @@
 import { jsonResponse } from "../lib/well-core.js";
-import { primaryAdminEmail } from "../lib/admin-auth.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return jsonResponse(res, 405, { error: "Method not allowed" });
@@ -13,9 +12,7 @@ export default async function handler(req, res) {
     ai: Boolean(process.env.OPENAI_API_KEY),
     database,
     payments: Boolean(database && process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && stripePrices),
-    webhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-    admin: Boolean(database && process.env.ADMIN_SETUP_TOKEN),
-    adminEmail: primaryAdminEmail(),
-    appName: "Throw a Penny"
+    appName: "Throw a Penny",
+    version: "1.7.3"
   });
 }

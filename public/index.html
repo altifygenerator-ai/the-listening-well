@@ -15,8 +15,7 @@
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="google-site-verification" content="KwEGfy95f_I9gBehCcN_p7di46od8c_Q6RVu2uMQdUg" />
-  <meta name="description" content="Throw a digital penny into The Listening Well, make a private wish, and receive a thoughtful AI-powered echo, meaning, and next step." />
-  <meta name="keywords" content="digital wishing well, AI wishing well, make a wish online, private reflection, wish journal, Throw a Penny" />
+  <meta name="description" content="Make a private wish, toss a digital penny into the well, and get a thoughtful response you can save, revisit, or share without revealing the wish." />
   <meta name="author" content="Throw a Penny" />
   <link rel="canonical" href="https://throwapenny.com/" />
   <link rel="sitemap" type="application/xml" href="https://throwapenny.com/sitemap.xml" />
@@ -44,8 +43,8 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="/styles.css" />
-  <title>Throw a Penny | AI Wishing Well &amp; Private Reflection</title>
+  <link rel="stylesheet" href="/styles.css?v=1.7.3" />
+  <title>Throw a Penny | A Digital Wishing Well</title>
 
   <script type="application/ld+json">
   {
@@ -57,7 +56,7 @@
         "url": "https://throwapenny.com/",
         "name": "Throw a Penny",
         "alternateName": "The Listening Well",
-        "description": "A private digital wishing-well experience with thoughtful AI-powered reflections.",
+        "description": "A private digital wishing-well experience with thoughtful responses you can save, revisit, and share.",
         "inLanguage": "en-US"
       },
       {
@@ -66,7 +65,7 @@
         "url": "https://throwapenny.com/",
         "name": "Throw a Penny",
         "alternateName": "The Listening Well",
-        "description": "Throw a digital penny, make a private wish, and receive a thoughtful AI-powered echo, meaning, and grounded next step.",
+        "description": "Make a private wish, throw a digital penny into the well, and receive a thoughtful response with something useful to carry forward.",
         "applicationCategory": "EntertainmentApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires a modern web browser with JavaScript enabled.",
@@ -304,7 +303,7 @@
           <div class="section-heading">
             <div>
               <h3>Saved wishes</h3>
-              <p>Only this device can see local wishes.</p>
+              <p>Your journal stays with this browser unless you export it.</p>
             </div>
           </div>
           <div class="wish-list" id="wishList"></div>
@@ -351,7 +350,7 @@
           <button class="price-card value-card" data-pack="copper_10">
             <span class="value-copy">
               <i class="value-coin copper-value">C</i>
-              <span><strong>Copper · keep a wish moving</strong><small>Ask practical follow-ups when you want clarity, a decision, or a real next step.</small><em>10 continuations</em></span>
+              <span><strong>Copper · keep a wish moving</strong><small>Ask practical follow-ups when you want clarity, a decision, or a real next step.</small><em>10 Copper pennies</em></span>
             </span>
             <b>$2.99</b>
           </button>
@@ -359,15 +358,15 @@
             <span class="best-fit">Most to explore</span>
             <span class="value-copy">
               <i class="value-coin moon-value">☾</i>
-              <span><strong>Moon · see the wish differently</strong><small>A fuller reading, deeper perspective shift, private Moon note, and Moon share card.</small><em>30 Moon readings</em></span>
+              <span><strong>Moon · see the wish differently</strong><small>A fuller reading, a different angle, a private Moon note, and a chance to notice a relevant pattern from recent saved wishes.</small><em>30 Moon pennies</em></span>
             </span>
             <b>$4.99</b>
           </button>
         </div>
         <div class="purchase-trust" aria-label="Purchase details">
-          <span>Secure Stripe checkout</span>
-          <span>No subscription required</span>
-          <span>No account required</span>
+          <span>Secure checkout</span>
+          <span>Copper &amp; Moon packs are one-time</span>
+          <span>Stays with this browser</span>
         </div>
         <details class="keeper-option" id="keeperDetails">
           <summary>Use the well a lot? See Well Keeper</summary>
@@ -376,8 +375,9 @@
             <b>$4.99<small>/mo</small></b>
           </button>
         </details>
+        <button class="text-button keeper-manage" id="manageKeeperButton" hidden>Cancel Well Keeper</button>
         <button class="gift-button subtle-gift" id="giftButton">Send the free well to a friend</button>
-        <p class="payment-note" id="paymentNote">Payments stay in preview until Supabase and Stripe are connected.</p>
+        <p class="payment-note" id="paymentNote" hidden>Purchases are temporarily unavailable. Your free daily penny still works.</p>
       </div>
     </aside>
 
@@ -399,7 +399,7 @@
 
         <div class="free-follow-up-action" id="freeFollowUpAction">
           <button class="gold-button full-width" id="continueFreeButton">Ask this follow-up free</button>
-          <small>No penny needed. This one free follow-up lets you test whether the well really understood you.</small>
+          <small>This one's on the well. Stay with the same wish and ask what came up next.</small>
         </div>
 
         <div class="premium-follow-up-actions" id="premiumFollowUpActions" hidden>
@@ -464,6 +464,6 @@
     });
   </script>
   <script defer src="/_vercel/insights/script.js"></script>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=1.7.3"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { generateOpenAIWish, jsonResponse, localWishResponse, readJson, rpc, sanitizeWish, supabaseRequest, uuidLike } from "../lib/well-core.js";
+import { generateOpenAIWish, jsonResponse, readJson, rpc, sanitizeWish, supabaseRequest, uuidLike } from "../lib/well-core.js";
 
 function reflectionFromRow(row) {
   return {
@@ -34,9 +34,15 @@ export default async function handler(req, res) {
     }
 
     const summaryWish = `Create a monthly reflection from these private wishes. Do not repeat or expose them verbatim. Notice the clearest recurring need and suggest one grounded focus for the next month:\n${lines.map((line, index) => `${index + 1}. ${line}`).join("\n")}`;
-    const response = process.env.OPENAI_API_KEY
-      ? await generateOpenAIWish({ wish: summaryWish, priorThemes: [], apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "gpt-5" })
-      : localWishResponse(summaryWish);
+    if (!process.env.OPENAI_API_KEY) {
+      return jsonResponse(res, 503, { error: "The month’s echo is temporarily quiet. Try again a little later." });
+    }
+    const response = await generateOpenAIWish({
+      wish: summaryWish,
+      priorThemes: [],
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || "gpt-5"
+    });
 
     if (databaseConnected) {
       const rows = await supabaseRequest("monthly_reflections", {

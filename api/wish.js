@@ -4,7 +4,6 @@ import {
   generateOpenAIWish,
   harmfulResponse,
   jsonResponse,
-  localWishResponse,
   moderateWish,
   readJson,
   rpc,
@@ -12,6 +11,8 @@ import {
   supabaseRequest,
   uuidLike
 } from "../lib/well-core.js";
+
+const RESPONSE_VERSION = "1.7.3";
 
 const rateBuckets = globalThis.__listeningWellRateBuckets || new Map();
 globalThis.__listeningWellRateBuckets = rateBuckets;
@@ -57,18 +58,41 @@ function responseDepth(coinSource) {
 }
 
 async function freeFollowUpAvailable({ sessionId, parentCloudId }) {
-  if (!uuidLike(parentCloudId)) return { allowed: false, reason: "missing_parent" };
-  const parentRows = await supabaseRequest(
-    `wishes?id=eq.${parentCloudId}&session_id=eq.${sessionId}&select=id&limit=1`,
-    { method: "GET" }
-  );
-  if (!Array.isArray(parentRows) || !parentRows.length) return { allowed: false, reason: "parent_not_found" };
-  // The free continuation is a one-time proof of value for the whole well, not one free chat turn on every daily wish.
-  const usedRows = await supabaseRequest(
-    `wishes?session_id=eq.${sessionId}&response_kind=eq.follow_up&coin_source=eq.local&select=id&limit=1`,
-    { method: "GET" }
-  );
-  return { allowed: !Array.isArray(usedRows) || usedRows.length === 0, reason: "already_used" };
+  // Prefer strict cloud verification, but do not break an existing browser if it
+  // still has wishes from an older schema/version. The client also enforces the
+  // one-free-follow-up rule for normal users.
+  if (uuidLike(parentCloudId)) {
+    try {
+      const parentRows = await supabaseRequest(
+        `wishes?id=eq.${parentCloudId}&session_id=eq.${sessionId}&select=id&limit=1`,
+        { method: "GET" }
+      );
+      if (Array.isArray(parentRows) && !parentRows.length) return { allowed: false, reason: "parent_not_found" };
+    } catch (error) {
+      console.warn("Free follow-up parent verification skipped:", error.message);
+    }
+  }
+
+  try {
+    const usedRows = await supabaseRequest(
+      `wishes?session_id=eq.${sessionId}&response_kind=eq.follow_up&coin_source=eq.local&select=id&limit=1`,
+      { method: "GET" }
+    );
+    return { allowed: !Array.isArray(usedRows) || usedRows.length === 0, reason: "already_used" };
+  } catch (error) {
+    // Older databases may not have response_kind yet. A free follow-up has always
+    // been stored with coin_source=local, so that remains a safe compatibility check.
+    try {
+      const legacyUsedRows = await supabaseRequest(
+        `wishes?session_id=eq.${sessionId}&coin_source=eq.local&select=id&limit=1`,
+        { method: "GET" }
+      );
+      return { allowed: !Array.isArray(legacyUsedRows) || legacyUsedRows.length === 0, reason: "already_used" };
+    } catch (legacyError) {
+      console.warn("Free follow-up compatibility check unavailable:", legacyError.message);
+      return { allowed: true, reason: "compatibility_mode" };
+    }
+  }
 }
 
 async function persistWish({ sessionId, wish, clarification = "", response, coinSource, followUp = null }) {
@@ -123,6 +147,13 @@ export default async function handler(req, res) {
   let refundableSessionId = null;
   try {
     const body = await readJson(req);
+    if (String(body.clientVersion || "") !== RESPONSE_VERSION) {
+      return jsonResponse(res, 409, {
+        error: "A newer version of the well is ready. Refresh the page once and try again.",
+        code: "APP_UPDATE_REQUIRED",
+        responseVersion: RESPONSE_VERSION
+      });
+    }
     const wish = sanitizeWish(body.wish);
     const sessionId = String(body.sessionId || "");
     const priorThemes = Array.isArray(body.priorThemes) ? body.priorThemes.map(String).slice(-5) : [];
@@ -146,7 +177,7 @@ export default async function handler(req, res) {
     if (!wish || wish.length < 3) return jsonResponse(res, 400, { error: "Please give the well a little more to listen to." });
     if (followUp && followUp.question.length < 4) return jsonResponse(res, 400, { error: "Ask the well one clear follow-up question." });
     if (followUp && coinIntent === "daily") return jsonResponse(res, 400, { error: "Follow-up echoes use the free clarification, a Copper penny, or a Moon penny." });
-    if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "Invalid session" });
+    if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "The well lost its place. Refresh the page and try again.", code: "SESSION_RESET_NEEDED" });
     if (!rateAllowed(req, sessionId)) {
       res.setHeader("Retry-After", "3600");
       return jsonResponse(res, 429, { error: "The well needs a little quiet before hearing more wishes." });
@@ -170,9 +201,9 @@ Additional detail: ${clarification}` : ""}`;
       }
     }
 
-    if (!response && !process.env.OPENAI_API_KEY && process.env.VERCEL) {
+    if (!response && !process.env.OPENAI_API_KEY) {
       return jsonResponse(res, 503, {
-        error: "The well is temporarily quiet. Your penny was not used.",
+        error: "The well could not answer just now. Your penny was not used. Please try again in a moment.",
         code: "AI_UNAVAILABLE"
       });
     }
@@ -187,7 +218,7 @@ Additional detail: ${clarification}` : ""}`;
         return jsonResponse(res, 409, {
           error: availability.reason === "already_used"
             ? "Your free follow-up has already been used."
-            : "The original wish could not be verified for a free follow-up.",
+            : "This saved wish cannot use the free follow-up. Copper or Moon can keep it going.",
           code: availability.reason === "already_used" ? "FREE_FOLLOW_UP_USED" : "FREE_FOLLOW_UP_UNAVAILABLE"
         });
       }
@@ -213,23 +244,20 @@ Additional detail: ${clarification}` : ""}`;
     if (!response) {
       const depth = freeFollowUp ? "clarify" : responseDepth(coinSource);
       try {
-        response = process.env.OPENAI_API_KEY
-          ? await generateOpenAIWish({
-              wish,
-              priorThemes,
-              priorContext,
-              followUp,
-              clarification,
-              apiKey: process.env.OPENAI_API_KEY,
-              model: process.env.OPENAI_MODEL || "gpt-5",
-              depth,
-              safetyIdentifier: sessionId
-            })
-          : localWishResponse(wish, { depth });
+        response = await generateOpenAIWish({
+          wish,
+          priorThemes,
+          priorContext,
+          followUp,
+          clarification,
+          apiKey: process.env.OPENAI_API_KEY,
+          model: process.env.OPENAI_MODEL || "gpt-5",
+          depth,
+          safetyIdentifier: sessionId
+        });
       } catch (error) {
         console.error("AI response unavailable:", error);
-        if (process.env.OPENAI_API_KEY) throw error;
-        response = localWishResponse(wish, { depth });
+        throw error;
       }
     }
 
@@ -242,7 +270,8 @@ Additional detail: ${clarification}` : ""}`;
       coinSource: freeFollowUp ? "free" : coinSource,
       wishId,
       responseKind: followUp ? "follow_up" : "wish",
-      followUpTier: freeFollowUp ? "free" : followUp ? "paid" : null
+      followUpTier: freeFollowUp ? "free" : followUp ? "paid" : null,
+      responseVersion: RESPONSE_VERSION
     });
   } catch (error) {
     console.error(error);
@@ -258,8 +287,8 @@ Additional detail: ${clarification}` : ""}`;
     }
     return jsonResponse(res, 500, {
       error: refundableCoin
-        ? "The well could not give this wish a response good enough to keep. Your penny was restored; try adding one more real detail."
-        : "The well could not give this wish a response good enough to keep. No penny was used; try adding one more real detail."
+        ? "The well went quiet before it could answer. Your penny was returned. Try again in a moment."
+        : "The well went quiet before it could answer. No penny was used. Try again in a moment."
     });
   }
 }

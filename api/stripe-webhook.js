@@ -5,24 +5,30 @@ import { expectedPriceId, getPack } from "../lib/commerce.js";
 export const config = { api: { bodyParser: false } };
 
 async function readRaw(req, limit = 1_000_000) {
-  if (Buffer.isBuffer(req.body)) {
-    if (req.body.length > limit) throw new Error("Request too large");
-    return req.body;
+  // Vercel exposes req.body through a lazy getter. Reading that getter parses JSON
+  // and destroys the exact byte sequence Stripe signed. Only use a body value when
+  // it is a real data property (our local/test server); otherwise consume the stream.
+  const bodyDescriptor = Object.getOwnPropertyDescriptor(req, "body");
+  if (bodyDescriptor && Object.prototype.hasOwnProperty.call(bodyDescriptor, "value")) {
+    const value = bodyDescriptor.value;
+    if (Buffer.isBuffer(value)) {
+      if (value.length > limit) throw new Error("Request too large");
+      return value;
+    }
+    if (typeof value === "string") {
+      const raw = Buffer.from(value, "utf8");
+      if (raw.length > limit) throw new Error("Request too large");
+      return raw;
+    }
   }
-  if (typeof req.body === "string") {
-    const raw = Buffer.from(req.body, "utf8");
-    if (raw.length > limit) throw new Error("Request too large");
-    return raw;
-  }
-  if (req.body && typeof req.body === "object") {
-    throw new Error("Stripe webhook body was parsed before signature verification");
-  }
+
   let size = 0;
   const chunks = [];
   for await (const chunk of req) {
-    size += chunk.length;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
     if (size > limit) throw new Error("Request too large");
-    chunks.push(chunk);
+    chunks.push(buffer);
   }
   return Buffer.concat(chunks);
 }
@@ -154,7 +160,8 @@ async function processEvent(event) {
   if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
     const context = await subscriptionContext(object);
     if (!uuidLike(context.sessionId)) throw new Error("Subscription metadata is missing session_id");
-    const active = event.type !== "customer.subscription.deleted" && ["active", "trialing"].includes(context.status);
+    const cancellationScheduled = Boolean(object?.cancel_at_period_end);
+    const active = event.type !== "customer.subscription.deleted" && ["active", "trialing"].includes(context.status) && !cancellationScheduled;
     await rpc("set_well_subscription", {
       p_session_id: context.sessionId,
       p_active: active,

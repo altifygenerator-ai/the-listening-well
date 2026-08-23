@@ -9,6 +9,7 @@ import wishCheckHandler from "./api/wish-check.js";
 import stateHandler from "./api/state.js";
 import sealHandler from "./api/seal.js";
 import checkoutHandler from "./api/checkout.js";
+import cancelKeeperHandler from "./api/cancel-keeper.js";
 import webhookHandler from "./api/stripe-webhook.js";
 import monthlyHandler from "./api/monthly.js";
 import deleteSessionHandler from "./api/delete-session.js";
@@ -30,6 +31,7 @@ const apiRoutes = new Map([
   ["/api/state", stateHandler],
   ["/api/seal", sealHandler],
   ["/api/checkout", checkoutHandler],
+  ["/api/cancel-keeper", cancelKeeperHandler],
   ["/api/stripe-webhook", webhookHandler],
   ["/api/monthly", monthlyHandler],
   ["/api/delete-session", deleteSessionHandler],
@@ -76,6 +78,14 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "Unexpected server error" }));
       }
     }
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/")) {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(JSON.stringify({ error: "Not found" }));
     return;
   }
 

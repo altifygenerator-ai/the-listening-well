@@ -177,7 +177,7 @@ async function loadDashboard() {
 async function boot() {
   try {
     const me = await api("/api/admin/me");
-    loginEmail.value = me.email || "altifygenerator@gmail.com";
+    if (me.email) loginEmail.value = me.email;
     if (me.authenticated) {
       authPanel.hidden = true;
       dashboard.hidden = false;

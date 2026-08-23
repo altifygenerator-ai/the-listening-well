@@ -1,66 +1,57 @@
-# Verification report
+# Deploy-ready verification report · v1.7.3
 
-Audited on August 4, 2026.
+Verified August 23, 2026.
 
-## Automated checks passed
+## Automated suite
 
-Run with:
+Run:
 
 ```bash
 npm run check
 ```
 
-The current automated suite passed all of the following:
+Current result:
 
-- Syntax validation for the local Node server, all API handlers, libraries, the main browser app, and the admin browser app
-- No duplicate IDs in either main or admin HTML
-- No missing HTML element targets referenced by the browser JavaScript
-- Explicit Vercel routing for all six nested `/api/admin/...` URLs
-- Exact pack map remains `copper_10`, `moon_30`, and `keeper_monthly`
-- `copper_10` maps to 10 copper credits and one-time Checkout
-- `moon_30` maps to 30 moon credits and one-time Checkout
-- `keeper_monthly` maps to 90 moon credits and subscription Checkout
-- Checkout passes the correct Price ID, pack key, coin type, and subscription metadata
-- Moon wishes actually send `RESPONSE MODE: MOON WATER` to OpenAI
-- OpenAI responses use strict JSON Schema Structured Outputs and `store: false`
-- Webhook signature test with a raw request body
-- Copper Checkout grants only copper credits
-- Moon Checkout grants only moon credits
-- Keeper Checkout and paid renewals grant moon credits
-- Paid renewal handling routes through `invoice.paid`
-- Webhook fulfillment records Stripe event IDs for idempotency
-- A paid moon coin is automatically restored when a forced database persistence error occurs
-- Admin first-time setup is locked to `altifygenerator@gmail.com`, confirms the account, assigns the admin role, signs it in, and sets an HttpOnly cookie
-- New Supabase `sb_secret_...` and legacy `service_role` header behavior are both supported
-- New and migration SQL both contain copper/moon wallets, refund RPC, subscription RPC, webhook audit RPC, and explicit service-role execution grants
+```json
+{
+  "ok": true,
+  "syntaxFiles": 24,
+  "dom": {
+    "indexIds": 105,
+    "adminIds": 22
+  }
+}
+```
 
-## Manual/static audit fixes included
+The suite verifies JavaScript syntax, DOM references, Vercel routing, public-copy leak guards, PWA update behavior, Stripe pack mappings, Checkout metadata, raw-body webhook signatures, idempotent credit delivery, renewal credits, Well Keeper cancellation, safe cloud deletion, admin setup, coin restoration after failed persistence, one-time free follow-up enforcement, OpenAI structured output, response-quality rewriting, and required Supabase functions/migrations.
 
-- Fixed the earlier premium-mode bug where the UI said Deep Water but the selected response mode was not passed to OpenAI
-- Split the old single paid-credit balance into copper and moon wallets
-- Migrated existing `paid` wish records to `copper` before adding the new database constraint
-- Added different copper and moon coin visuals, well lighting, labels, response modes, and share-card treatment
-- Fixed Vercel admin route destinations
-- Added Stripe Price-object verification in Admin
-- Added raw-body webhook signature verification and actual Price-ID matching before fulfillment
-- Added `checkout.session.async_payment_succeeded` support
-- Prevented initial subscription credits from being granted twice by both Checkout and the first invoice
-- Added webhook and credit-delivery audit tables/views in Admin
-- Added automatic paid-coin restoration after a post-consumption server failure
-- Changed private cloud-state synchronization from a query-string session ID to a POST body
-- Escaped dynamic Stripe/webhook/admin values before displaying them in the admin interface
-- Removed the public Admin link from the customer-facing footer; the admin remains available directly at `/admin.html`
+## Runtime smoke tests
 
-## Still requires real credentials
+The local Node server was started with no production credentials and verified:
 
-The code can simulate and validate request routing, signatures, mappings, and failure behavior, but these items must be completed against the real accounts:
+- `/api/config` returns a safe public capability response.
+- `/api/wish-check` handles a concrete wish.
+- `/api/wish` completes the local-development flow.
+- `/api/cancel-keeper` returns a customer-safe unavailable response when integrations are absent.
+- `/api/delete-session` succeeds safely when no cloud database is configured.
+- Unknown `/api/...` routes return JSON 404 rather than the homepage.
+- `/`, `robots.txt`, and `sitemap.xml` serve correctly.
 
-- Run the SQL schema or migration in the actual Supabase project
-- Create the actual Supabase Auth admin password for `altifygenerator@gmail.com`
-- Verify all three real Stripe test Price IDs in the Admin catalog panel
-- Complete all three actual Stripe test Checkouts
-- Confirm the deployed Stripe endpoint receives signed events and returns HTTP 200
-- Test a real subscription renewal/cancellation in Stripe test mode
-- Make real OpenAI moderation and Responses API calls
+## Production-specific fixes included
 
-Use `WEBHOOK_ADMIN_SETUP.md` for the exact procedure.
+- Stripe webhook verification reads the untouched raw request bytes before signature verification.
+- OpenAI generation is bounded by timeouts and no longer chains repeated editor passes.
+- A failed generated wish restores a consumed paid or daily penny.
+- Stripe return handling detects credits that arrived before the customer returned from Checkout.
+- Copper and Moon credits remain separate through Checkout, webhook delivery, storage, and UI.
+- Daily-penny date handling matches the server's UTC date boundary.
+- Stale client coin state is resynced after a server `NO_COIN` response.
+- Clearing a browser-linked well does not erase the local identifier until cloud deletion is confirmed.
+- Well Keeper can be canceled from the penny wallet without removing already delivered Moon pennies.
+- Existing installed PWA sessions reload once when a new service worker takes control.
+- Main HTML, JavaScript, CSS, and service-worker routes are set to revalidate instead of leaving customers on stale releases.
+- Customer-facing pages avoid infrastructure/setup wording.
+
+## What still requires a real deployed-account test
+
+Automated tests cannot use the owner's live secrets. After deployment, complete one Stripe test-mode Copper purchase, one Moon purchase, and one Well Keeper signup/cancel cycle and confirm successful `2xx` webhook deliveries in Stripe. Also make one real OpenAI wish on the deployed domain. No live secret values are included in this project archive.

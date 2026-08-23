@@ -1,7 +1,7 @@
 {
   "name": "Throw a Penny: The Listening Well",
   "short_name": "Throw a Penny",
-  "description": "Make a private wish, toss a digital penny, and receive a thoughtful AI-powered echo from The Listening Well.",
+  "description": "Make a private wish, toss a digital penny into the well, and receive a thoughtful response you can save and revisit.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

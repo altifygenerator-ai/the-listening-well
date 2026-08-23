@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     const sessionId = String(body.sessionId || "");
     if (!wish || wish.length < 3) return jsonResponse(res, 400, { error: "Give the well a little more to listen to." });
     if (detectLocalSafety(wish)) return jsonResponse(res, 200, { ready: true, question: "", reason: "specific_enough" });
-    if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "Invalid session" });
+    if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "The well lost its place. Refresh the page and try again.", code: "SESSION_RESET_NEEDED" });
     if (!allowed(req, sessionId)) return jsonResponse(res, 429, { ready: true, question: "", reason: "specific_enough" });
 
     if (!process.env.OPENAI_API_KEY) return jsonResponse(res, 200, localReadiness(wish));
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
       const result = await assessWishReadiness({
         wish,
         apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_QUALITY_MODEL || process.env.OPENAI_MODEL || "gpt-5",
+        model: process.env.OPENAI_QUALITY_MODEL || "gpt-5-mini",
         safetyIdentifier: sessionId
       });
       return jsonResponse(res, 200, result);

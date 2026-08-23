@@ -12,12 +12,12 @@ export default async function handler(req, res) {
     const secret = process.env.STRIPE_SECRET_KEY;
     const price = expectedPriceId(selection);
     if (!databaseReady) return jsonResponse(res, 503, {
-      error: "Connect Supabase before accepting payments so purchased pennies can be delivered safely.",
-      code: "DATABASE_NOT_CONFIGURED"
+      error: "Purchases are temporarily unavailable. Please try again later.",
+      code: "PURCHASES_UNAVAILABLE"
     });
     if (!secret || !price) return jsonResponse(res, 503, {
-      error: "Payments are ready for keys but are not connected yet.",
-      code: "PAYMENTS_NOT_CONFIGURED"
+      error: "Purchases are temporarily unavailable. Please try again later.",
+      code: "PURCHASES_UNAVAILABLE"
     });
 
     const origin = inferOrigin(req);
