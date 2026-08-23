@@ -31,9 +31,10 @@ Production responses are not accepted just because the model returned valid JSON
 
 - The prompt extracts the literal subject, desired outcome, supported tension, and concrete details before answering.
 - Generic mystical filler and unsupported assumptions are explicitly prohibited.
-- A separate model pass grades specificity, directness, grounding, usefulness, generic risk, and invented details.
-- A weak first draft gets one focused rewrite from the editor critique.
-- A deterministic final guard rejects known canned phrases and responses that are not visibly anchored to the person's wish. If the rewrite still fails that guard, the penny is returned instead of showing a bad answer.
+- The structured response is checked locally for retired canned phrases, generic openings, and loss of connection to the actual wish.
+- A clearly bad first draft gets one focused rewrite, but normal wishes do not pay the latency/reliability cost of a second editor-model call.
+- Short, specific wishes are allowed to use natural synonyms, so a wish such as “I wish I was taller” can be answered using words like “height” without being falsely rejected.
+- If the rewrite still fails the anti-generic guard, the penny is returned instead of showing a bad answer.
 - If OpenAI is unavailable, the app returns the penny rather than presenting a canned fallback as a real reading.
 
 ## Run locally
@@ -90,7 +91,7 @@ public/styles.css                        Scene, responsive UI, Copper/Moon treat
 public/app.js                            Ritual, wallets, follow-ups, journal, sharing, analytics
 api/wish-check.js                        Optional pre-toss specificity check
 api/wish.js                              Safety, coin use, AI generation, persistence
-lib/well-core.js                         Main AI prompt, structured output, quality gate
+lib/well-core.js                         Main AI prompt, structured output, anti-generic guard
 lib/commerce.js                          Stripe pack source of truth
 api/checkout.js                         Stripe-hosted Checkout
 api/cancel-keeper.js                    Customer-initiated Well Keeper cancellation
@@ -123,6 +124,6 @@ altifygenerator@gmail.com
 
 See `WEBHOOK_ADMIN_SETUP.md` for first-time admin creation, Stripe testing, webhook verification, and manual Copper/Moon grants.
 
-## v1.7.3 response repair
+## v1.7.4 response repair
 
 The current build includes a client/server version handshake, retired-response filtering, versioned assets, and a stricter direct-answer prompt so old canned responses cannot silently reappear.

@@ -1,6 +1,6 @@
 {
   "name": "the-listening-well",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "private": true,
   "type": "module",
   "description": "A mobile-first digital wishing well built around specific AI reflections, one-time free follow-up proof, paid Copper/Moon continuations, private journaling, Supabase storage, Stripe payments, sharing, analytics, and admin tools.",

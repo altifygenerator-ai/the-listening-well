@@ -136,19 +136,6 @@ async function openAIAudit() {
   globalThis.fetch = async (_url, options) => {
     const payload = JSON.parse(options.body);
     payloads.push(payload);
-    if (payload?.text?.format?.name === "well_quality") {
-      return new Response(JSON.stringify({
-        output_text: JSON.stringify({
-          specificity: 5,
-          directness: 5,
-          grounding: 5,
-          usefulness: 5,
-          genericRisk: false,
-          inventedDetails: false,
-          critique: "Strong and specific."
-        })
-      }), { status: 200, headers: { "content-type": "application/json" } });
-    }
     const input = String(payload?.input || "");
     const response = /sister/i.test(input)
       ? {
@@ -177,20 +164,18 @@ async function openAIAudit() {
             moonNote: "If the change comes, notice which part came from your choice and which part came from circumstance.",
             mood: "moonlit", theme: "change"
           };
-    return new Response(JSON.stringify({
-      output_text: JSON.stringify(response)
-    }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ output_text: JSON.stringify(response) }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
     const result = await generateOpenAIWish({ wish: "I wish for change", apiKey: "test", depth: "moon", safetyIdentifier: "session" });
-    assert.equal(result.source, "openai-moon-reviewed");
+    assert.equal(result.source, "openai-moon-checked");
     const moonPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
     assert.match(moonPayload.input, /RESPONSE MODE: MOON WATER/);
     assert.equal(moonPayload.text.format.type, "json_schema");
     assert.equal(moonPayload.text.format.strict, true);
     assert.equal(moonPayload.store, false);
     assert.ok(moonPayload.safety_identifier);
-    assert.ok(payloads.some(payload => payload?.text?.format?.name === "well_quality"), "Quality review was not requested");
+    assert.equal(payloads.some(payload => payload?.text?.format?.name === "well_quality"), false, "Normal wishes should not require a second editor-model call");
 
     payloads.length = 0;
     const followUpResult = await generateOpenAIWish({
@@ -206,12 +191,11 @@ async function openAIAudit() {
         originalMeaning: "You want stability more than novelty."
       }
     });
-    assert.equal(followUpResult.source, "openai-deep-follow-up-reviewed");
+    assert.equal(followUpResult.source, "openai-deep-follow-up-checked");
     const followPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
     assert.match(followPayload.input, /CONVERSATION TYPE: FOLLOW-UP/);
     assert.match(followPayload.input, /FOLLOW-UP DIRECTION: ACTION/);
     assert.match(followPayload.input, /What should I do first\?/);
-    assert.match(followPayload.input, /RECENT PRIVATE CONTEXT/);
 
     payloads.length = 0;
     const freeResult = await generateOpenAIWish({
@@ -226,9 +210,7 @@ async function openAIAudit() {
         originalMeaning: "You want a different pattern, not simply to win an argument."
       }
     });
-    assert.equal(freeResult.source, "openai-clarify-follow-up-reviewed");
-    const freePayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
-    assert.match(freePayload.input, /RESPONSE MODE: FREE CLARIFICATION/);
+    assert.equal(freeResult.source, "openai-clarify-follow-up-checked");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -238,39 +220,23 @@ async function qualityRetryAudit() {
   const { generateOpenAIWish } = await import("../lib/well-core.js");
   const originalFetch = globalThis.fetch;
   let responseCalls = 0;
-  let qualityCalls = 0;
   globalThis.fetch = async (_url, options) => {
-    const payload = JSON.parse(options.body);
-    if (payload?.text?.format?.name === "well_quality") {
-      qualityCalls += 1;
-      const corrected = qualityCalls > 1;
-      return new Response(JSON.stringify({
-        output_text: JSON.stringify({
-          specificity: corrected ? 5 : 2,
-          directness: corrected ? 5 : 3,
-          grounding: corrected ? 5 : 2,
-          usefulness: corrected ? 5 : 2,
-          genericRisk: !corrected,
-          inventedDetails: false,
-          critique: corrected ? "Specific and grounded." : "The answer could fit almost any work wish. Address the stated customer problem and dependable-income goal directly."
-        })
-      }), { status: 200, headers: { "content-type": "application/json" } });
-    }
     responseCalls += 1;
     const corrected = responseCalls > 1;
     return new Response(JSON.stringify({
       output_text: JSON.stringify({
         answer: corrected
-          ? "You are not asking for abstract success; you want enough repeat customers that the business stops feeling unpredictable month to month."
+          ? "You want enough repeat landscaping customers that payroll stops being a fresh uncertainty every month."
           : "Trust the journey and keep moving forward.",
         meaning: corrected
-          ? "The wish is about dependable demand more than a single big sale."
+          ? "The wish is about dependable demand rather than one unusually good month."
           : "Your path may be asking you to believe in yourself.",
         nextStep: corrected
-          ? "Identify the service that produced the most repeat or referral work and contact three past customers connected to it."
+          ? "Identify the landscaping service that produced the most repeat work and contact three past customers connected to it."
           : "Take a small step.",
-        shareLine: "Steady progress can matter more than one dramatic breakthrough.",
-        followUpQuestion: "Which source of work has been the most repeatable so far?",
+        shareLine: "Steady work comes from finding what can be repeated.",
+        followUpQuestion: "Which source of repeat work has been most reliable?",
+        moonNote: null,
         mood: "steady",
         theme: "work"
       })
@@ -278,40 +244,22 @@ async function qualityRetryAudit() {
   };
   try {
     const result = await generateOpenAIWish({
-      wish: "I wish my business had enough repeat customers that I could count on steady income every month",
+      wish: "I wish my landscaping business had enough repeat customers to cover payroll every month",
       apiKey: "test",
       model: "gpt-5"
     });
-    assert.equal(responseCalls, 2, "A failed quality review did not trigger one regeneration");
-    assert.equal(qualityCalls, 1, "A weak first draft should be reviewed once before one focused rewrite");
-    assert.match(result.answer, /repeat customers/i);
+    assert.equal(responseCalls, 2, "A deterministically generic first draft should trigger exactly one regeneration");
+    assert.match(result.answer, /repeat landscaping customers/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
 }
 
-
 async function qualityHardStopAudit() {
   const { generateOpenAIWish } = await import("../lib/well-core.js");
   const originalFetch = globalThis.fetch;
   let responseCalls = 0;
-  let qualityCalls = 0;
-  globalThis.fetch = async (_url, options) => {
-    const payload = JSON.parse(options.body);
-    if (payload?.text?.format?.name === "well_quality") {
-      qualityCalls += 1;
-      return new Response(JSON.stringify({
-        output_text: JSON.stringify({
-          specificity: 2,
-          directness: 3,
-          grounding: 2,
-          usefulness: 2,
-          genericRisk: true,
-          inventedDetails: false,
-          critique: "Still too generic to ship."
-        })
-      }), { status: 200, headers: { "content-type": "application/json" } });
-    }
+  globalThis.fetch = async () => {
     responseCalls += 1;
     return new Response(JSON.stringify({
       output_text: JSON.stringify({
@@ -336,11 +284,58 @@ async function qualityHardStopAudit() {
       error => error?.code === "RESPONSE_TOO_GENERIC",
       "A second canned draft must be rejected instead of shown to the customer"
     );
-    assert.equal(responseCalls, 2, "A weak first draft should still trigger one regeneration");
-    assert.equal(qualityCalls, 1, "The editor should run once; the corrected structured rewrite should not add a second latency-heavy review");
+    assert.equal(responseCalls, 2, "A weak response should get one rewrite and then stop");
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+async function shortWishAudit() {
+  const { generateOpenAIWish } = await import("../lib/well-core.js");
+  const originalFetch = globalThis.fetch;
+  let responseCalls = 0;
+  globalThis.fetch = async () => {
+    responseCalls += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        answer: "Wanting more height is straightforward, but whether you may still grow depends on your age and growth stage. There is no honest way to promise more height from the information here. If you are still growing, time and genetics matter; if you are fully grown, natural height is generally not something you can meaningfully change.",
+        meaning: "There does not have to be a deeper meaning behind wanting to be taller.",
+        nextStep: "If you want to know whether more growth is realistically possible, the useful next fact is whether you are still in a normal growth stage.",
+        shareLine: "Some wishes become clearer when you separate what may still change from what may not.",
+        followUpQuestion: "Is this mostly about whether you may still grow, or about how your current height affects you?",
+        moonNote: null,
+        mood: "steady",
+        theme: "health"
+      })
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const result = await generateOpenAIWish({ wish: "I wish I was taller", apiKey: "test", model: "gpt-5" });
+    assert.equal(responseCalls, 1, "A valid short wish must not be rejected just because the answer uses a natural synonym like height");
+    assert.match(result.answer, /height/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+
+async function wishReadinessAudit() {
+  const { default: handler } = await import("../api/wish-check.js");
+  const shortSpecific = responseRecorder();
+  await handler(request({ method: "POST", body: {
+    sessionId: "99999999-9999-4999-8999-999999999999",
+    wish: "I wish I was taller"
+  } }), shortSpecific);
+  assert.equal(shortSpecific.statusCode, 200, shortSpecific.body);
+  assert.equal(shortSpecific.json().ready, true, "A simple but specific wish like wanting to be taller should go straight to the well");
+
+  const vague = responseRecorder();
+  await handler(request({ method: "POST", body: {
+    sessionId: "99999999-9999-4999-8999-999999999998",
+    wish: "I wish I was happy"
+  } }), vague);
+  assert.equal(vague.statusCode, 200, vague.body);
+  assert.equal(vague.json().ready, false, "A truly vague wish should get one clarification question before the toss");
 }
 
 async function freeFollowUpAudit() {
@@ -393,7 +388,7 @@ async function freeFollowUpAudit() {
 
   const body = {
     sessionId,
-    clientVersion: "1.7.3",
+    clientVersion: "1.7.4",
     wish: "I wish my sister and I could talk without every conversation becoming an argument",
     coinIntent: "free",
     followUp: {
@@ -636,7 +631,7 @@ async function refundAudit() {
     await handler(request({
       method: "POST",
       headers: { "x-forwarded-for": "192.0.2.10" },
-      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.3", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
+      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.4", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
     }), res);
     assert.equal(res.statusCode, 500);
     assert.ok(rpcNames.includes("restore_well_coin"), "Consumed coin was not restored after persistence failure");
@@ -741,6 +736,8 @@ await commerceAudit();
 await openAIAudit();
 await qualityRetryAudit();
 await qualityHardStopAudit();
+await shortWishAudit();
+await wishReadinessAudit();
 await freeFollowUpAudit();
 await checkoutAudit();
 await stripeCatalogAudit();

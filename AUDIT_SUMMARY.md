@@ -1,11 +1,11 @@
-# Throw a Penny v1.7.3 audit summary
+# Throw a Penny v1.7.4 audit summary
 
 This release is based on the uploaded production project and focuses on customer-visible reliability rather than adding more features.
 
 ## Fixed reliability issues
 
 - Stripe webhook signature verification now preserves the exact signed request body on Vercel.
-- The wish pipeline now uses one generation, one quality review, and at most one focused rewrite instead of repeated model calls that could turn a good wish into a timeout.
+- The wish pipeline now uses one generation and at most one focused rewrite instead of repeated model calls that could turn a good wish into a timeout.
 - OpenAI failures in production do not silently show canned development responses.
 - Consumed pennies are restored when generation or persistence fails.
 - Daily-penny state uses the same UTC day boundary as Supabase and automatically resyncs stale browser state.

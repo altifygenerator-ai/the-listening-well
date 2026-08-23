@@ -1,5 +1,4 @@
 import {
-  assessWishReadiness,
   detectLocalSafety,
   jsonResponse,
   readJson,
@@ -51,20 +50,9 @@ export default async function handler(req, res) {
     if (!uuidLike(sessionId)) return jsonResponse(res, 400, { error: "The well lost its place. Refresh the page and try again.", code: "SESSION_RESET_NEEDED" });
     if (!allowed(req, sessionId)) return jsonResponse(res, 429, { ready: true, question: "", reason: "specific_enough" });
 
-    if (!process.env.OPENAI_API_KEY) return jsonResponse(res, 200, localReadiness(wish));
-
-    try {
-      const result = await assessWishReadiness({
-        wish,
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_QUALITY_MODEL || "gpt-5-mini",
-        safetyIdentifier: sessionId
-      });
-      return jsonResponse(res, 200, result);
-    } catch (error) {
-      console.error("Wish readiness check unavailable:", error);
-      return jsonResponse(res, 200, localReadiness(wish));
-    }
+    // Keep the pre-toss check deterministic and instant. It should help with truly vague
+    // wishes, not add another AI dependency before the actual answer is generated.
+    return jsonResponse(res, 200, localReadiness(wish));
   } catch (error) {
     console.error(error);
     return jsonResponse(res, 400, { error: "The well could not read that wish yet." });

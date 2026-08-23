@@ -12,7 +12,7 @@ import {
   uuidLike
 } from "../lib/well-core.js";
 
-const RESPONSE_VERSION = "1.7.3";
+const RESPONSE_VERSION = "1.7.4";
 
 const rateBuckets = globalThis.__listeningWellRateBuckets || new Map();
 globalThis.__listeningWellRateBuckets = rateBuckets;

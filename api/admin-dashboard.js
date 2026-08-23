@@ -57,6 +57,38 @@ export async function inspectStripeCatalog() {
   return { aligned: rows.length === 3 && rows.every(row => row.aligned), rows };
 }
 
+
+async function inspectOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_MODEL || "gpt-5";
+  if (!apiKey) return { configured: false, reachable: false, model, status: "missing", message: "OpenAI key is not configured." };
+  try {
+    const payload = {
+      model,
+      store: false,
+      input: "Reply with exactly OK.",
+      max_output_tokens: 32,
+      text: { verbosity: "low" }
+    };
+    if (/^gpt-5/i.test(model)) payload.reasoning = { effort: "minimal" };
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(9000)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const code = String(data?.error?.code || data?.error?.type || `http_${response.status}`);
+      const message = String(data?.error?.message || `OpenAI returned HTTP ${response.status}`).slice(0, 260);
+      return { configured: true, reachable: false, model, status: code, httpStatus: response.status, message };
+    }
+    return { configured: true, reachable: true, model, status: "ok", message: "The configured model answered successfully." };
+  } catch (error) {
+    return { configured: true, reachable: false, model, status: error?.name === "TimeoutError" ? "timeout" : "network_error", message: String(error?.message || "OpenAI could not be reached.").slice(0, 260) };
+  }
+}
+
 function countBy(rows, key) {
   return rows.reduce((result, row) => {
     const value = row[key] || "unknown";
@@ -71,12 +103,13 @@ export default async function handler(req, res) {
   if (!user) return;
 
   try {
-    const [profiles, wishes, creditEvents, webhookEvents, stripeCatalog] = await Promise.all([
+    const [profiles, wishes, creditEvents, webhookEvents, stripeCatalog, openaiDiagnostic] = await Promise.all([
       supabaseRequest("well_profiles?select=session_id,created_at,last_seen,daily_claim_date,copper_credits,moon_credits,subscription_active,total_wishes,stripe_customer_id&order=last_seen.desc&limit=250", { method: "GET" }),
       supabaseRequest("wishes?select=id,session_id,coin_source,theme,mood,created_at&order=created_at.desc&limit=5000", { method: "GET" }),
       supabaseRequest("well_credit_events?select=id,session_id,stripe_event_id,credits,coin_type,pack,source,created_at&order=created_at.desc&limit=100", { method: "GET" }),
       supabaseRequest("well_webhook_events?select=stripe_event_id,event_type,status,detail,created_at,updated_at&order=updated_at.desc&limit=100", { method: "GET" }),
-      inspectStripeCatalog()
+      inspectStripeCatalog(),
+      inspectOpenAI()
     ]);
 
     const now = Date.now();
@@ -94,10 +127,11 @@ export default async function handler(req, res) {
         copperPrice: Boolean(process.env.STRIPE_PRICE_COPPER_10),
         moonPrice: Boolean(process.env.STRIPE_PRICE_MOON_30),
         keeperPrice: Boolean(process.env.STRIPE_PRICE_KEEPER_MONTHLY),
-        openai: Boolean(process.env.OPENAI_API_KEY),
+        openai: Boolean(openaiDiagnostic?.reachable),
         stripeCatalog: Boolean(stripeCatalog?.aligned)
       },
       stripeCatalog,
+      openaiDiagnostic,
       totals: {
         profiles: profiles?.length || 0,
         wishes: wishes?.length || 0,

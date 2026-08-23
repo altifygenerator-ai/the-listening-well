@@ -1,4 +1,4 @@
-# Deploy-ready verification report · v1.7.3
+# Deploy-ready verification report · v1.7.4
 
 Verified August 23, 2026.
 

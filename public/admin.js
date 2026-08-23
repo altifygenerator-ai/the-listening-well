@@ -151,6 +151,14 @@ function renderEvents(target, events, type) {
 function renderDashboard(data) {
   dashboardData = data;
   renderHealth(data.health);
+  const openaiDiagnostic = $("#openaiDiagnostic");
+  if (data.openaiDiagnostic?.reachable) {
+    setMessage(openaiDiagnostic, `OpenAI ${data.openaiDiagnostic.model}: connection verified.`, "success");
+  } else if (data.openaiDiagnostic?.configured) {
+    setMessage(openaiDiagnostic, `OpenAI ${data.openaiDiagnostic.model}: ${data.openaiDiagnostic.status}. ${data.openaiDiagnostic.message}`, "error");
+  } else {
+    setMessage(openaiDiagnostic, "OpenAI is not configured.", "error");
+  }
   renderStripeCatalog(data.stripeCatalog);
   const stats = $("#statGrid");
   stats.replaceChildren(
