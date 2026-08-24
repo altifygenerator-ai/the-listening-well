@@ -12,7 +12,7 @@ import {
   uuidLike
 } from "../lib/well-core.js";
 
-const RESPONSE_VERSION = "1.7.4";
+const RESPONSE_VERSION = "1.7.5";
 
 const rateBuckets = globalThis.__listeningWellRateBuckets || new Map();
 globalThis.__listeningWellRateBuckets = rateBuckets;
@@ -256,19 +256,38 @@ Additional detail: ${clarification}` : ""}`;
           safetyIdentifier: sessionId
         });
       } catch (error) {
-        console.error("AI response unavailable:", error);
+        console.error("AI response unavailable:", {
+          code: error?.code || null,
+          status: error?.status || null,
+          message: String(error?.message || error).slice(0, 800)
+        });
+        error.publicCode = "AI_RESPONSE_FAILED";
         throw error;
       }
     }
 
-    let wishId = null;
-    if (!response.safety) wishId = await persistWish({ sessionId, wish, clarification, response, coinSource, followUp });
+    // From this point forward the user has a valid answer. A journal/database problem
+    // must never throw that answer away or make the app look like the AI failed.
     refundableCoin = null;
+    let wishId = null;
+    let cloudSaved = true;
+    if (!response.safety) {
+      try {
+        wishId = await persistWish({ sessionId, wish, clarification, response, coinSource, followUp });
+        cloudSaved = Boolean(wishId) || !databaseReady;
+      } catch (error) {
+        cloudSaved = false;
+        console.error("Wish cloud save failed after answer was generated:", {
+          message: String(error?.message || error).slice(0, 800)
+        });
+      }
+    }
 
     return jsonResponse(res, 200, {
       ...response,
       coinSource: freeFollowUp ? "free" : coinSource,
       wishId,
+      cloudSaved,
       responseKind: followUp ? "follow_up" : "wish",
       followUpTier: freeFollowUp ? "free" : followUp ? "paid" : null,
       responseVersion: RESPONSE_VERSION
@@ -285,10 +304,12 @@ Additional detail: ${clarification}` : ""}`;
         console.error("Could not automatically restore the consumed penny:", restoreError);
       }
     }
-    return jsonResponse(res, 500, {
+    const publicCode = error?.publicCode || (error?.code === "AI_UNAVAILABLE" ? "AI_UNAVAILABLE" : "WISH_FAILED");
+    return jsonResponse(res, publicCode === "AI_RESPONSE_FAILED" ? 502 : 500, {
       error: refundableCoin
-        ? "The well went quiet before it could answer. Your penny was returned. Try again in a moment."
-        : "The well went quiet before it could answer. No penny was used. Try again in a moment."
+        ? "The well could not finish your answer. Your penny was returned. Try again in a moment."
+        : "The well could not finish your answer. No penny was used. Try again in a moment.",
+      code: publicCode
     });
   }
 }

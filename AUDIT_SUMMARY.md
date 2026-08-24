@@ -1,32 +1,9 @@
-# Throw a Penny v1.7.4 audit summary
+# Throw a Penny v1.7.5 audit summary
 
-This release is based on the uploaded production project and focuses on customer-visible reliability rather than adding more features.
+The repeated customer-facing `went quiet` state had two possible sources hidden behind the same error: model generation and cloud persistence. v1.7.5 separates them.
 
-## Fixed reliability issues
+A generated answer is now treated as the product outcome. Once it exists, a later Supabase write problem cannot throw it away. Cloud persistence is best-effort after generation while the browser journal remains the immediate local copy.
 
-- Stripe webhook signature verification now preserves the exact signed request body on Vercel.
-- The wish pipeline now uses one generation and at most one focused rewrite instead of repeated model calls that could turn a good wish into a timeout.
-- OpenAI failures in production do not silently show canned development responses.
-- Consumed pennies are restored when generation or persistence fails.
-- Daily-penny state uses the same UTC day boundary as Supabase and automatically resyncs stale browser state.
-- Payment returns recognize credits delivered while the customer was still on Stripe Checkout.
-- Old browser/session data is repaired where possible instead of repeatedly breaking the experience.
-- Journal deletion fails safely if cloud deletion cannot be confirmed.
-- Well Keeper cancellation is available directly from the penny wallet.
-- PWA updates now actively replace stale releases for already-installed users.
+The OpenAI request path was simplified to the basic Responses API request first. The app retains a parse-recovery path plus model fallbacks, but avoids mandatory schema/reasoning/verbosity options on every wish.
 
-## Customer-facing cleanup
-
-- Public metadata and visible copy describe the wishing-well experience rather than the implementation stack.
-- Setup/database/webhook language is kept out of the customer experience.
-- Payment and failure messages are written as normal customer messages.
-- Privacy and Terms pages accurately describe browser-linked journals, third-party response processing, sharing, Stripe payments, analytics, and Well Keeper cancellation.
-- Admin remains private, unlinked from the customer footer, and marked `noindex,nofollow,noarchive`.
-
-## Preserved integrations
-
-- `throwapenny.com` canonical/SEO metadata and Google verification.
-- Vercel Web Analytics loader and privacy-safe custom event calls.
-- Existing Stripe product keys and prices.
-- Existing Supabase schema/migrations and anonymous journal model.
-- Copper and Moon wallets, share cards, sealed wishes, monthly echoes, admin tools, and refined OpenAI prompt.
+Automated checks cover syntax, DOM references, pricing mappings, Stripe webhooks, credit delivery, admin auth, wish readiness, short wishes, generic-response rewrite behavior, model fallback behavior, JSON parse recovery, generation-failure penny restoration, and cloud-save failure resilience.

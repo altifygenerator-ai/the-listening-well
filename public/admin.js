@@ -153,7 +153,8 @@ function renderDashboard(data) {
   renderHealth(data.health);
   const openaiDiagnostic = $("#openaiDiagnostic");
   if (data.openaiDiagnostic?.reachable) {
-    setMessage(openaiDiagnostic, `OpenAI ${data.openaiDiagnostic.model}: connection verified.`, "success");
+    const preview = data.openaiDiagnostic.preview ? ` Test answer: ${data.openaiDiagnostic.preview}` : "";
+    setMessage(openaiDiagnostic, `OpenAI ${data.openaiDiagnostic.model}: real wish path verified.${preview}`, "success");
   } else if (data.openaiDiagnostic?.configured) {
     setMessage(openaiDiagnostic, `OpenAI ${data.openaiDiagnostic.model}: ${data.openaiDiagnostic.status}. ${data.openaiDiagnostic.message}`, "error");
   } else {

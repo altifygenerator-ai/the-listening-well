@@ -4,7 +4,7 @@ const TOSS_DURATION_MS = 2150;
 const SPLASH_TRIGGER_MS = 1810;
 const MIN_RITUAL_DURATION_MS = 3500;
 const PURCHASE_CONFIRMATION_DELAYS_MS = [700, 1400, 2600, 4200, 6500, 9000];
-const CLIENT_VERSION = "1.7.4";
+const CLIENT_VERSION = "1.7.5";
 
 const memoryStorage = new Map();
 

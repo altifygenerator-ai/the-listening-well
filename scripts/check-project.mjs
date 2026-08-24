@@ -168,13 +168,11 @@ async function openAIAudit() {
   };
   try {
     const result = await generateOpenAIWish({ wish: "I wish for change", apiKey: "test", depth: "moon", safetyIdentifier: "session" });
-    assert.equal(result.source, "openai-moon-checked");
-    const moonPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
+    assert.equal(result.source, "openai-moon");
+    const moonPayload = payloads[0];
     assert.match(moonPayload.input, /RESPONSE MODE: MOON WATER/);
-    assert.equal(moonPayload.text.format.type, "json_schema");
-    assert.equal(moonPayload.text.format.strict, true);
     assert.equal(moonPayload.store, false);
-    assert.ok(moonPayload.safety_identifier);
+    assert.equal(moonPayload.text, undefined, "Normal wish generation should use the bare Responses API shape first");
     assert.equal(payloads.some(payload => payload?.text?.format?.name === "well_quality"), false, "Normal wishes should not require a second editor-model call");
 
     payloads.length = 0;
@@ -191,8 +189,8 @@ async function openAIAudit() {
         originalMeaning: "You want stability more than novelty."
       }
     });
-    assert.equal(followUpResult.source, "openai-deep-follow-up-checked");
-    const followPayload = payloads.find(payload => payload?.text?.format?.name === "well_response");
+    assert.equal(followUpResult.source, "openai-deep-follow-up");
+    const followPayload = payloads[0];
     assert.match(followPayload.input, /CONVERSATION TYPE: FOLLOW-UP/);
     assert.match(followPayload.input, /FOLLOW-UP DIRECTION: ACTION/);
     assert.match(followPayload.input, /What should I do first\?/);
@@ -210,7 +208,7 @@ async function openAIAudit() {
         originalMeaning: "You want a different pattern, not simply to win an argument."
       }
     });
-    assert.equal(freeResult.source, "openai-clarify-follow-up-checked");
+    assert.equal(freeResult.source, "openai-clarify-follow-up");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -275,16 +273,13 @@ async function qualityHardStopAudit() {
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
-    await assert.rejects(
-      () => generateOpenAIWish({
-        wish: "I wish my business had enough repeat landscaping customers to cover payroll every month",
-        apiKey: "test",
-        model: "gpt-5"
-      }),
-      error => error?.code === "RESPONSE_TOO_GENERIC",
-      "A second canned draft must be rejected instead of shown to the customer"
-    );
+    const result = await generateOpenAIWish({
+      wish: "I wish my business had enough repeat landscaping customers to cover payroll every month",
+      apiKey: "test",
+      model: "gpt-5"
+    });
     assert.equal(responseCalls, 2, "A weak response should get one rewrite and then stop");
+    assert.ok(result.answer, "A valid response must still be returned even if the rewrite remains imperfect");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -318,6 +313,40 @@ async function shortWishAudit() {
   }
 }
 
+
+async function responseCompatibilityAudit() {
+  const { generateOpenAIWish } = await import("../lib/well-core.js");
+  const originalFetch = globalThis.fetch;
+  const models = [];
+  let firstPayloadForMini = true;
+  globalThis.fetch = async (_url, options = {}) => {
+    const payload = JSON.parse(options.body || "{}");
+    models.push(payload.model);
+    if (payload.model === "gpt-5") {
+      return new Response(JSON.stringify({ error: { code: "model_not_found", message: "configured model unavailable" } }), { status: 404, headers: { "content-type": "application/json" } });
+    }
+    if (payload.model === "gpt-5-mini" && firstPayloadForMini) {
+      firstPayloadForMini = false;
+      return new Response(JSON.stringify({ output_text: "not-json" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ output_text: JSON.stringify({
+      answer: "Wanting more height is straightforward, but whether more growth is possible depends on your age and growth stage.",
+      meaning: "There may not be a deeper meaning behind wanting to be taller, and the information given is not enough to predict more growth.",
+      nextStep: "If you want a realistic answer about more growth, the useful next fact is whether you are still in a normal growth stage.",
+      shareLine: "Some wishes get clearer when you separate what may change from what may not.",
+      followUpQuestion: "Are you mainly wondering whether you may still grow, or how to feel better about your current height?",
+      moonNote: null, mood: "steady", theme: "health"
+    }) }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const result = await generateOpenAIWish({ wish: "I wish I was taller", apiKey: "test", model: "gpt-5" });
+    assert.match(result.answer, /height|growth/i);
+    assert.ok(models.includes("gpt-5-mini"), "The fallback model should be tried when the configured model is unavailable");
+    assert.equal(models.filter(model => model === "gpt-5-mini").length, 2, "An unparseable successful response should get one JSON-mode retry");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
 
 async function wishReadinessAudit() {
   const { default: handler } = await import("../api/wish-check.js");
@@ -388,7 +417,7 @@ async function freeFollowUpAudit() {
 
   const body = {
     sessionId,
-    clientVersion: "1.7.4",
+    clientVersion: "1.7.5",
     wish: "I wish my sister and I could talk without every conversation becoming an argument",
     coinIntent: "free",
     followUp: {
@@ -631,10 +660,13 @@ async function refundAudit() {
     await handler(request({
       method: "POST",
       headers: { "x-forwarded-for": "192.0.2.10" },
-      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.4", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
+      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.5", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
     }), res);
-    assert.equal(res.statusCode, 500);
-    assert.ok(rpcNames.includes("restore_well_coin"), "Consumed coin was not restored after persistence failure");
+    assert.equal(res.statusCode, 200, res.body);
+    const payload = res.json();
+    assert.equal(payload.cloudSaved, false, "A cloud-save failure should be reported without discarding the answer");
+    assert.ok(payload.answer, "The generated answer should still be returned after a cloud-save failure");
+    assert.equal(rpcNames.includes("restore_well_coin"), false, "A penny should remain consumed when the user received the answer");
   } finally {
     console.error = originalError;
     globalThis.fetch = originalFetch;
@@ -642,6 +674,51 @@ async function refundAudit() {
   }
 }
 
+
+async function generationFailureRestoresCoinAudit() {
+  process.env.SUPABASE_URL = "https://project.supabase.co";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+  process.env.OPENAI_API_KEY = "test";
+  const { default: handler } = await import("../api/wish.js");
+  const originalFetch = globalThis.fetch;
+  const rpcNames = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value.includes("api.openai.com/v1/moderations")) {
+      return new Response(JSON.stringify({ results: [{ flagged: false, categories: {} }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (value.includes("api.openai.com/v1/responses")) {
+      return new Response(JSON.stringify({ error: { code: "server_error", message: "forced model failure" } }), { status: 500, headers: { "content-type": "application/json" } });
+    }
+    const rpcMatch = value.match(/\/rpc\/([^?]+)/);
+    if (rpcMatch) {
+      const name = rpcMatch[1];
+      rpcNames.push(name);
+      if (name === "consume_well_coin") return new Response(JSON.stringify({ allowed: true, source: "copper" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (name === "restore_well_coin") return new Response(JSON.stringify({ restored: true }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected fetch in generation failure test: ${value}`);
+  };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const res = responseRecorder();
+    await handler(request({ method: "POST", body: {
+      sessionId: "22222222-2222-4222-8222-222222222222",
+      clientVersion: "1.7.5",
+      wish: "I wish I was taller",
+      coinIntent: "copper"
+    } }), res);
+    assert.equal(res.statusCode, 502, res.body);
+    assert.equal(res.json().code, "AI_RESPONSE_FAILED");
+    assert.ok(rpcNames.includes("restore_well_coin"), "A consumed penny must be restored when generation fails");
+  } finally {
+    console.error = originalError;
+    globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
+  }
+}
 
 async function cancelKeeperAudit() {
   process.env.SUPABASE_URL = "https://project.supabase.co";
@@ -737,6 +814,7 @@ await openAIAudit();
 await qualityRetryAudit();
 await qualityHardStopAudit();
 await shortWishAudit();
+await responseCompatibilityAudit();
 await wishReadinessAudit();
 await freeFollowUpAudit();
 await checkoutAudit();
@@ -745,6 +823,7 @@ await webhookAudit();
 await cancelKeeperAudit();
 await adminSetupAudit();
 await refundAudit();
+await generationFailureRestoresCoinAudit();
 await deleteSessionAudit();
 await sqlAudit();
 console.log(JSON.stringify({ ok: true, ...results }, null, 2));

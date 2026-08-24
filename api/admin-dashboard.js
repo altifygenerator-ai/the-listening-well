@@ -1,5 +1,5 @@
 import { requireAdmin } from "../lib/admin-auth.js";
-import { jsonResponse, supabaseRequest } from "../lib/well-core.js";
+import { generateOpenAIWish, jsonResponse, supabaseRequest } from "../lib/well-core.js";
 import { PACKS, expectedPriceId } from "../lib/commerce.js";
 
 
@@ -63,29 +63,29 @@ async function inspectOpenAI() {
   const model = process.env.OPENAI_MODEL || "gpt-5";
   if (!apiKey) return { configured: false, reachable: false, model, status: "missing", message: "OpenAI key is not configured." };
   try {
-    const payload = {
+    const result = await generateOpenAIWish({
+      wish: "I wish I was taller",
+      apiKey,
       model,
-      store: false,
-      input: "Reply with exactly OK.",
-      max_output_tokens: 32,
-      text: { verbosity: "low" }
-    };
-    if (/^gpt-5/i.test(model)) payload.reasoning = { effort: "minimal" };
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(9000)
+      depth: "standard"
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const code = String(data?.error?.code || data?.error?.type || `http_${response.status}`);
-      const message = String(data?.error?.message || `OpenAI returned HTTP ${response.status}`).slice(0, 260);
-      return { configured: true, reachable: false, model, status: code, httpStatus: response.status, message };
-    }
-    return { configured: true, reachable: true, model, status: "ok", message: "The configured model answered successfully." };
+    return {
+      configured: true,
+      reachable: true,
+      model,
+      status: "ok",
+      message: "The real wish-response path answered successfully.",
+      preview: String(result.answer || "").slice(0, 300)
+    };
   } catch (error) {
-    return { configured: true, reachable: false, model, status: error?.name === "TimeoutError" ? "timeout" : "network_error", message: String(error?.message || "OpenAI could not be reached.").slice(0, 260) };
+    return {
+      configured: true,
+      reachable: false,
+      model,
+      status: String(error?.code || `http_${error?.status || "error"}`),
+      httpStatus: error?.status || null,
+      message: String(error?.openaiMessage || error?.message || "OpenAI could not be reached.").slice(0, 320)
+    };
   }
 }
 

@@ -63,7 +63,7 @@ Without an OpenAI key, the interface, animation, journal, share cards, and other
 npm run check
 ```
 
-The project check covers JavaScript syntax, DOM references, Vercel admin routes, coin mappings, response modes, response-quality retry behavior, Stripe Checkout metadata, raw-body webhook fulfillment, subscription renewals and cancellation, safe cloud deletion, free-follow-up enforcement, Supabase functions, and paid-penny restoration after a failed write.
+The project check covers JavaScript syntax, DOM references, Vercel admin routes, coin mappings, response modes, response-quality retry behavior, Stripe Checkout metadata, raw-body webhook fulfillment, subscription renewals and cancellation, safe cloud deletion, free-follow-up enforcement, Supabase functions, and penny restoration when response generation itself fails, plus cloud-save resilience after a valid answer exists.
 
 ## Supabase
 
@@ -109,7 +109,7 @@ WEBHOOK_ADMIN_SETUP.md                   Setup/testing guide
 - Stripe event IDs are stored to prevent duplicate fulfillment.
 - Well Keeper can be canceled from the penny wallet; future renewals stop while existing pennies remain.
 - Copper and Moon balances are separate.
-- A paid penny is restored if it is consumed but the completed wish cannot be saved.
+- A consumed penny is restored if response generation fails before a valid answer is delivered. If cloud journal saving fails after a valid answer exists, the answer still returns and remains in the browser journal instead of being discarded.
 - Private wish text is not included in public share cards or analytics events.
 - Clearing the browser-linked well only removes local state after cloud deletion is confirmed.
 - There is currently no customer login. Paid pennies and journal recovery are tied to the anonymous browser session; do not imply cross-device recovery until account recovery is added.
@@ -127,3 +127,7 @@ See `WEBHOOK_ADMIN_SETUP.md` for first-time admin creation, Stripe testing, webh
 ## v1.7.4 response repair
 
 The current build includes a client/server version handshake, retired-response filtering, versioned assets, and a stricter direct-answer prompt so old canned responses cannot silently reappear.
+
+## v1.7.5 response reliability repair
+
+The customer wish path now prioritizes reliability over strict output machinery. It uses the basic Responses API shape first, has compatibility model fallbacks, never discards a valid answer because cloud storage failed afterward, and restores a consumed penny when generation itself truly fails. The admin OpenAI diagnostic exercises the same shared wish-generation path used by customers.
