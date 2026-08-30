@@ -4,7 +4,7 @@ const TOSS_DURATION_MS = 2150;
 const SPLASH_TRIGGER_MS = 1810;
 const MIN_RITUAL_DURATION_MS = 3500;
 const PURCHASE_CONFIRMATION_DELAYS_MS = [700, 1400, 2600, 4200, 6500, 9000];
-const CLIENT_VERSION = "1.7.5";
+const CLIENT_VERSION = "1.8.0";
 
 const memoryStorage = new Map();
 
@@ -161,7 +161,37 @@ const elements = {
   installButton: $("#installButton"),
   exportButton: $("#exportButton"),
   clearButton: $("#clearButton"),
-  homeButton: $("#homeButton")
+  homeButton: $("#homeButton"),
+  habitStrip: $("#habitStrip"),
+  streakCount: $("#streakCount"),
+  questName: $("#questName"),
+  questProgressText: $("#questProgressText"),
+  questProgressFill: $("#questProgressFill"),
+  weekListeningDays: $("#weekListeningDays"),
+  needButtons: $$('[data-need]'),
+  followThroughCard: $("#followThroughCard"),
+  followThroughText: $("#followThroughText"),
+  followThroughYes: $("#followThroughYes"),
+  followThroughLater: $("#followThroughLater"),
+  listenControl: $("#listenControl"),
+  listenButton: $("#listenButton"),
+  listenIcon: $("#listenIcon"),
+  listenLabel: $("#listenLabel"),
+  listenStatus: $("#listenStatus"),
+  carryActions: $("#carryActions"),
+  commitActionButton: $("#commitActionButton"),
+  heardEnoughButton: $("#heardEnoughButton"),
+  carryCompleteText: $("#carryCompleteText"),
+  echoReward: $("#echoReward"),
+  echoRewardTitle: $("#echoRewardTitle"),
+  echoRewardText: $("#echoRewardText"),
+  echoQuestText: $("#echoQuestText"),
+  echoXpText: $("#echoXpText"),
+  reflectionFeedback: $("#reflectionFeedback"),
+  feedbackButtons: $$('[data-feedback]'),
+  feedbackThanks: $("#feedbackThanks"),
+  premiumPreview: $("#premiumPreview"),
+  premiumPreviewButton: $("#premiumPreviewButton")
 };
 
 const runtime = {
@@ -178,7 +208,13 @@ const runtime = {
   returnedWish: null,
   followUpContext: null,
   followUpDraft: null,
-  coinChoicesExpanded: false
+  coinChoicesExpanded: false,
+  composerStarted: false,
+  analyticsQueue: [],
+  analyticsFlushTimer: null,
+  speechUtterance: null,
+  speechRecordId: null,
+  followThroughRecordId: null
 };
 
 function localDateKey(date = new Date()) {
@@ -218,6 +254,16 @@ function freshState() {
     monthlyReflections: [],
     conversionEvents: [],
     pendingFollowUp: null,
+    habit: {
+      goal: "clarity",
+      preferredMode: "read",
+      xp: 0,
+      meaningfulDays: [],
+      questStartedAt: null,
+      questGoal: "clarity",
+      questCompletedAt: null,
+      feedbackCount: 0
+    },
     settings: { sound: true, gentleReminders: true }
   };
 }
@@ -273,7 +319,15 @@ function loadState() {
       wishes: safeWishes,
       monthlyReflections: safeReflections,
       conversionEvents: Array.isArray(parsed.conversionEvents) ? parsed.conversionEvents.slice(-120) : [],
-      pendingFollowUp: sessionValid && parsed.pendingFollowUp && typeof parsed.pendingFollowUp === "object" ? parsed.pendingFollowUp : null
+      pendingFollowUp: sessionValid && parsed.pendingFollowUp && typeof parsed.pendingFollowUp === "object" ? parsed.pendingFollowUp : null,
+      habit: {
+        ...base.habit,
+        ...(parsed.habit && typeof parsed.habit === "object" ? parsed.habit : {}),
+        goal: ["clarity","calm","courage","let_go","focus","other"].includes(parsed.habit?.goal) ? parsed.habit.goal : "clarity",
+        meaningfulDays: Array.isArray(parsed.habit?.meaningfulDays) ? [...new Set(parsed.habit.meaningfulDays.filter(Boolean))].slice(-400) : [],
+        xp: Math.max(0, Number(parsed.habit?.xp || 0))
+      },
+      settings: { ...base.settings, ...(parsed.settings && typeof parsed.settings === "object" ? parsed.settings : {}) }
     };
   } catch {
     return freshState();
@@ -383,21 +437,49 @@ function showToast(message, duration = 2600) {
   runtime.toastTimer = setTimeout(() => elements.toast.classList.remove("show"), duration);
 }
 
+function safeEventDetails(details = {}) {
+  const blocked = /wish|answer|journal|prompt|text|message|content/i;
+  return Object.fromEntries(
+    Object.entries(details)
+      .filter(([key, value]) => !blocked.test(key) && (value === null || ["string", "number", "boolean"].includes(typeof value)))
+      .slice(0, 12)
+      .map(([key, value]) => [key, typeof value === "string" ? value.slice(0, 120) : value])
+  );
+}
+
+async function flushEventQueue() {
+  clearTimeout(runtime.analyticsFlushTimer);
+  runtime.analyticsFlushTimer = null;
+  if (!runtime.analyticsQueue.length) return;
+  const events = runtime.analyticsQueue.splice(0, 20);
+  try {
+    await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: state.sessionId, clientVersion: CLIENT_VERSION, events }),
+      keepalive: true
+    });
+  } catch {
+    // Vercel/local analytics remain available even if durable event storage is unavailable.
+  }
+}
+
 function trackEvent(name, details = {}) {
+  const safeDetails = safeEventDetails(details);
   const event = {
+    id: createId(),
     name,
-    details,
+    details: safeDetails,
     at: new Date().toISOString()
   };
   state.conversionEvents.push(event);
   state.conversionEvents = state.conversionEvents.slice(-120);
   saveState();
+  runtime.analyticsQueue.push(event);
+  clearTimeout(runtime.analyticsFlushTimer);
+  runtime.analyticsFlushTimer = setTimeout(flushEventQueue, 700);
   try {
-    const data = Object.fromEntries(
-      Object.entries(details)
-        .filter(([, value]) => value === null || ["string", "number", "boolean"].includes(typeof value))
-        .slice(0, 2)
-    );
+    const data = Object.fromEntries(Object.entries(safeDetails).slice(0, 4));
     window.va?.("event", { name, data });
   } catch {
     // Analytics is optional. Local events still make launch testing inspectable.
@@ -417,12 +499,204 @@ function isUnlocked(record) {
   return !record.sealedUntil || new Date(record.sealedUntil).getTime() <= Date.now();
 }
 
-function getGardenLevel(count = state.wishes.length) {
-  if (count >= 12) return 4;
-  if (count >= 6) return 3;
-  if (count >= 3) return 2;
-  if (count >= 1) return 1;
+const NEED_LABELS = { clarity: "Clarity", calm: "Calm", courage: "Courage", let_go: "Let go", focus: "Focus", other: "Daily" };
+
+function addDaysKey(key, amount) {
+  const [y, m, d] = String(key).split("-").map(Number);
+  const date = new Date(y, (m || 1) - 1, d || 1, 12);
+  date.setDate(date.getDate() + amount);
+  return localDateKey(date);
+}
+
+function listeningDays() {
+  return [...new Set((state.habit?.meaningfulDays || []).filter(Boolean))].sort();
+}
+
+function listeningDaysLast7() {
+  const set = new Set(listeningDays());
+  let count = 0;
+  for (let offset = 0; offset < 7; offset += 1) if (set.has(addDaysKey(localDateKey(), -offset))) count += 1;
+  return count;
+}
+
+function computeStreak() {
+  const days = new Set(listeningDays());
+  if (!days.size) return { count: 0, repaired: false };
+  const today = localDateKey();
+  const yesterday = addDaysKey(today, -1);
+  let cursor = days.has(today) ? today : days.has(yesterday) ? yesterday : null;
+  if (!cursor) return { count: 0, repaired: false };
+  let count = 0;
+  let repaired = false;
+  for (let guard = 0; guard < 120; guard += 1) {
+    if (days.has(cursor)) {
+      count += 1;
+      cursor = addDaysKey(cursor, -1);
+      continue;
+    }
+    const prior = addDaysKey(cursor, -1);
+    if (!repaired && days.has(prior)) {
+      repaired = true;
+      cursor = prior;
+      continue;
+    }
+    break;
+  }
+  return { count, repaired };
+}
+
+function questProgress() {
+  const days = listeningDays();
+  const start = state.habit?.questStartedAt ? localDateKey(new Date(state.habit.questStartedAt)) : days[0];
+  const eligible = start ? days.filter(day => day >= start) : [];
+  return Math.min(3, eligible.length);
+}
+
+function habitLevelFromXp(xp = Number(state.habit?.xp || 0)) {
+  if (xp >= 280) return 4;
+  if (xp >= 160) return 3;
+  if (xp >= 80) return 2;
+  if (xp >= 30) return 1;
   return 0;
+}
+
+function findPendingActionCheckin() {
+  const today = localDateKey();
+  return [...state.wishes].reverse().find(record =>
+    record?.actionCommittedAt && !record.actionCompletedAt && localDateKey(new Date(record.createdAt)) < today && record.actionDeferredDate !== today
+  ) || null;
+}
+
+function updateFollowThroughPrompt() {
+  const record = findPendingActionCheckin();
+  runtime.followThroughRecordId = record?.id || null;
+  if (!elements.followThroughCard) return;
+  elements.followThroughCard.hidden = !record;
+  if (record && elements.followThroughText) elements.followThroughText.textContent = "Did anything shift after you carried that step with you?";
+}
+
+function completeDailyEcho(record, actionMode) {
+  if (!record || record.response?.safety || record.isMonthly) return;
+  const alreadyComplete = Boolean(record.echoCompletedAt);
+  const today = localDateKey();
+  const beforeDays = new Set(listeningDays());
+  if (!alreadyComplete) {
+    record.echoCompletedAt = new Date().toISOString();
+    if (!state.habit.questStartedAt) {
+      state.habit.questStartedAt = record.echoCompletedAt;
+      state.habit.questGoal = state.habit.goal || "clarity";
+      trackEvent("quest_started", { quest: `${state.habit.questGoal}_3_day` });
+    }
+    if (!beforeDays.has(today)) {
+      state.habit.meaningfulDays = [...beforeDays, today].sort().slice(-400);
+      state.habit.xp = Math.max(0, Number(state.habit.xp || 0)) + 10;
+      trackEvent("quest_step_completed", { quest: `${state.habit.questGoal}_3_day`, step: questProgress() });
+    } else {
+      state.habit.xp = Math.max(0, Number(state.habit.xp || 0)) + 2;
+    }
+  }
+  if (actionMode === "commit" && !record.actionCommittedAt) {
+    record.actionCommittedAt = new Date().toISOString();
+    trackEvent("next_step_committed", { source: record.responseKind === "follow_up" ? "follow_up" : "daily_echo" });
+  }
+  if (actionMode === "heard") record.heardEnoughAt = record.heardEnoughAt || new Date().toISOString();
+  const progress = questProgress();
+  if (progress >= 3 && !state.habit.questCompletedAt) {
+    state.habit.questCompletedAt = new Date().toISOString();
+    state.habit.xp += 15;
+    trackEvent("quest_completed", { quest: `${state.habit.questGoal}_3_day` });
+  }
+  const streak = computeStreak();
+  trackEvent("reflection_completed", { mode: record.listenedAt ? "listen" : "read", goal: state.habit.goal, streak: streak.count });
+  if (!alreadyComplete && streak.count > 1) trackEvent("streak_extended", { current: streak.count, repaired: streak.repaired });
+  saveState();
+  showResponse(record);
+  updateUI();
+}
+
+function resolveActionCheckin(completed) {
+  const record = state.wishes.find(item => item.id === runtime.followThroughRecordId);
+  if (!record) return;
+  if (completed) {
+    record.actionCompletedAt = new Date().toISOString();
+    state.habit.xp = Math.max(0, Number(state.habit.xp || 0)) + 5;
+    trackEvent("next_step_completed", { delay: "later_day" });
+    showToast("That follow-through added another ripple to your well.");
+  } else {
+    record.actionDeferredDate = localDateKey();
+    trackEvent("next_step_deferred", { delay: "not_yet" });
+    showToast("No catching up. The thread will still be here when it helps.");
+  }
+  saveState();
+  updateUI();
+}
+
+function cancelSpeech() {
+  try { window.speechSynthesis?.cancel(); } catch {}
+  runtime.speechUtterance = null;
+  runtime.speechRecordId = null;
+  if (elements.listenIcon) elements.listenIcon.textContent = "▶";
+  if (elements.listenLabel) elements.listenLabel.textContent = "Hear your reflection";
+}
+
+function estimatedListenSeconds(record) {
+  const words = `${record?.response?.answer || ""} ${record?.response?.nextStep || ""}`.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(15, Math.round(words / 2.5));
+}
+
+function toggleListen() {
+  const record = runtime.currentRecord;
+  if (!record || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  const synth = window.speechSynthesis;
+  if (runtime.speechRecordId === record.id && synth.speaking) {
+    if (synth.paused) {
+      synth.resume();
+      elements.listenIcon.textContent = "Ⅱ";
+      elements.listenLabel.textContent = "Pause";
+      trackEvent("audio_play_resumed", { mode: "browser_voice" });
+    } else {
+      synth.pause();
+      elements.listenIcon.textContent = "▶";
+      elements.listenLabel.textContent = "Resume";
+      trackEvent("audio_play_paused", { mode: "browser_voice" });
+    }
+    return;
+  }
+  cancelSpeech();
+  const utterance = new SpeechSynthesisUtterance(`${record.response.answer}. One thing for today: ${record.response.nextStep}`);
+  utterance.rate = .94;
+  utterance.pitch = 1;
+  utterance.lang = document.documentElement.lang || navigator.language || "en-US";
+  utterance.onstart = () => {
+    elements.listenIcon.textContent = "Ⅱ";
+    elements.listenLabel.textContent = "Pause";
+    elements.listenStatus.textContent = "Listening…";
+    trackEvent("audio_play_started", { mode: "browser_voice", seconds: estimatedListenSeconds(record) });
+  };
+  utterance.onend = () => {
+    record.listenedAt = new Date().toISOString();
+    state.habit.preferredMode = "listen";
+    saveState();
+    runtime.speechUtterance = null;
+    runtime.speechRecordId = null;
+    elements.listenIcon.textContent = "↻";
+    elements.listenLabel.textContent = "Hear it again";
+    elements.listenStatus.textContent = "Reflection heard.";
+    trackEvent("audio_play_completed", { mode: "browser_voice" });
+  };
+  utterance.onerror = () => {
+    cancelSpeech();
+    elements.listenStatus.textContent = "Reading still works on this device.";
+  };
+  runtime.speechUtterance = utterance;
+  runtime.speechRecordId = record.id;
+  synth.speak(utterance);
+}
+
+function getGardenLevel(count = state.wishes.length) {
+  const habitLevel = habitLevelFromXp();
+  const legacyLevel = count >= 12 ? 4 : count >= 6 ? 3 : count >= 3 ? 2 : count >= 1 ? 1 : 0;
+  return Math.max(habitLevel, legacyLevel);
 }
 
 function depthLabel(level) {
@@ -443,8 +717,19 @@ function updateUI() {
   if (elements.followMoonBalance) elements.followMoonBalance.textContent = state.moonCredits > 0 ? `${state.moonCredits} ready` : "$4.99 · 30 Moon";
   if (elements.manageKeeperButton) elements.manageKeeperButton.hidden = !state.subscriptionActive;
   if (runtime.installPrompt) elements.installButton.hidden = state.wishes.length < 1;
-  elements.totalRipples.textContent = String(state.wishes.length);
-  elements.daysVisited.textContent = String(state.visitDays.length);
+  const meaningful = listeningDays();
+  const streak = computeStreak();
+  const progress = questProgress();
+  elements.totalRipples.textContent = String(Math.max(0, Number(state.habit?.xp || 0)));
+  elements.daysVisited.textContent = String(meaningful.length);
+  if (elements.habitStrip) elements.habitStrip.hidden = meaningful.length < 1;
+  if (elements.streakCount) elements.streakCount.textContent = String(streak.count);
+  if (elements.weekListeningDays) elements.weekListeningDays.textContent = `${listeningDaysLast7()} / 7`;
+  if (elements.questName) elements.questName.textContent = `3-day ${NEED_LABELS[state.habit?.questGoal || state.habit?.goal || "clarity"]} Quest`;
+  if (elements.questProgressText) elements.questProgressText.textContent = `${progress} / 3`;
+  if (elements.questProgressFill) elements.questProgressFill.style.width = `${Math.round(progress / 3 * 100)}%`;
+  for (const button of elements.needButtons || []) button.classList.toggle("selected", button.dataset.need === (state.habit?.goal || "clarity"));
+  updateFollowThroughPrompt();
   const level = getGardenLevel();
   elements.gardenDepth.textContent = depthLabel(level);
   elements.garden.className = `garden level-${level}`;
@@ -556,6 +841,7 @@ function renderCoinChoices({ forceCollapsed = false } = {}) {
 }
 
 function resetExperience({ preserveText = false } = {}) {
+  cancelSpeech();
   runtime.busy = false;
   runtime.currentRecord = null;
   runtime.followUpContext = null;
@@ -567,6 +853,8 @@ function resetExperience({ preserveText = false } = {}) {
   elements.responseCard.hidden = true;
   elements.responseCard.classList.remove("deep-water-response", "copper-water-response", "moon-water-response");
   elements.upgradeOffer.hidden = true;
+  if (elements.echoReward) elements.echoReward.hidden = true;
+  if (elements.premiumPreview) elements.premiumPreview.hidden = true;
   elements.responseInsight.open = false;
   elements.responseMore.open = false;
   elements.listeningState.hidden = true;
@@ -652,6 +940,7 @@ async function preparePenny() {
     elements.wishInput.focus();
     return;
   }
+  trackEvent("wish_submitted", { goal: state.habit?.goal || "clarity", chars: wish.length < 80 ? "short" : wish.length < 220 ? "medium" : "long" });
   if (runtime.wishClarification || runtime.wishCheckSkipped) {
     proceedToPenny(wish);
     return;
@@ -741,12 +1030,13 @@ async function animateToss() {
   const destinationY = waterRect.top + waterRect.height / 2 - (rect.top + rect.height / 2);
   const arcHeight = Math.max(150, Math.abs(destinationY) * .44);
   const isFollowUpToss = Boolean(runtime.followUpContext);
+  const isFirstDailyEcho = !isFollowUpToss && listeningDays().length === 0;
   const tossDuration = isFollowUpToss
     ? (runtime.pendingCoinSource === "moon" ? 1600 : 1120)
-    : TOSS_DURATION_MS;
+    : isFirstDailyEcho ? 1250 : TOSS_DURATION_MS;
   const splashDelay = isFollowUpToss
     ? (runtime.pendingCoinSource === "moon" ? 1360 : 910)
-    : SPLASH_TRIGGER_MS;
+    : isFirstDailyEcho ? 980 : SPLASH_TRIGGER_MS;
 
   const animation = flyer.animate([
     { transform: "translate3d(0,0,0) rotateZ(0deg) scale(1)", opacity: 1, offset: 0 },
@@ -813,22 +1103,37 @@ function clientSafetyResponse(wish) {
 }
 
 async function requestWishResponse(wish, coinIntent, followUp = null) {
-  const response = await fetch("/api/wish", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: state.sessionId,
-      clientVersion: CLIENT_VERSION,
-      wish,
-      // Keep everyday answers anchored to the wish in front of the person.
-      // Moon is the only mode allowed to notice a relevant pattern from recent saved wishes.
-      priorContext: coinIntent === "moon" ? priorContext(followUp?.parentId || null) : [],
-      clarification: followUp ? "" : runtime.wishClarification,
-      coinIntent,
-      followUp
-    })
-  });
+  const startedAt = performance.now();
+  let response;
+  try {
+    response = await fetch("/api/wish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: state.sessionId,
+        clientVersion: CLIENT_VERSION,
+        wish,
+        experienceMode: "daily_echo",
+        goal: state.habit?.goal || "clarity",
+        habitContext: {
+          questId: `${state.habit?.questGoal || state.habit?.goal || "clarity"}_3_day`,
+          questDay: Math.min(3, questProgress() + 1),
+          preferredMode: state.habit?.preferredMode || "read"
+        },
+        // Keep everyday answers anchored to the wish in front of the person.
+        // Moon is the only mode allowed to notice a relevant pattern from recent saved wishes.
+        priorContext: coinIntent === "moon" ? priorContext(followUp?.parentId || null) : [],
+        clarification: followUp ? "" : runtime.wishClarification,
+        coinIntent,
+        followUp
+      })
+    });
+  } catch (error) {
+    trackEvent("api_request_failed", { route: "wish", error: "network" });
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
+  trackEvent(response.ok ? "api_request_completed" : "api_request_failed", { route: "wish", latency_ms: Math.round(performance.now() - startedAt), status: response.status });
   if (response.ok && data.responseVersion && data.responseVersion !== CLIENT_VERSION) {
     const error = new Error("A newer version of the well is ready. Refresh once and try your wish again.");
     error.code = "APP_UPDATE_REQUIRED";
@@ -885,7 +1190,7 @@ async function tossPenny() {
     const response = await responsePromise;
     const ritualMinimum = followUpContext
       ? (localCoinSource === "moon" ? 2200 : 1500)
-      : MIN_RITUAL_DURATION_MS;
+      : listeningDays().length === 0 ? 1350 : MIN_RITUAL_DURATION_MS;
     const remaining = Math.max(0, ritualMinimum - (Date.now() - started));
     if (remaining) await new Promise(resolve => setTimeout(resolve, remaining));
     if (response.safety) {
@@ -921,7 +1226,9 @@ async function tossPenny() {
       createdAt: new Date().toISOString(),
       sealedUntil: null,
       revisitedAt: null,
-      sharedAt: null
+      sharedAt: null,
+      goal: state.habit?.goal || "clarity",
+      experienceMode: "daily_echo"
     };
     state.wishes.push(record);
     trackEvent(followUpContext ? "follow_up_completed" : "wish_completed", {
@@ -954,6 +1261,7 @@ async function tossPenny() {
 }
 
 function showResponse(record) {
+  cancelSpeech();
   runtime.currentRecord = record;
   runtime.currentWish = record.wish || "";
   const isFollowUp = record.responseKind === "follow_up";
@@ -1017,6 +1325,37 @@ function showResponse(record) {
     trackEvent("premium_follow_up_offer_viewed", { theme: record.response.theme, source: isFreeContinuation ? "free_follow_up" : "saved_wish" });
   }
 
+  const echoComplete = Boolean(record.echoCompletedAt);
+  if (elements.carryActions) elements.carryActions.hidden = Boolean(record.isMonthly) || safetyResponse || echoComplete;
+  if (elements.carryCompleteText) {
+    elements.carryCompleteText.hidden = !echoComplete;
+    elements.carryCompleteText.textContent = record.actionCommittedAt ? "You chose to carry this forward. The well can ask how it went when you return." : echoComplete ? "You took what you needed from this Echo today." : "";
+  }
+  if (elements.echoReward) {
+    elements.echoReward.hidden = !echoComplete;
+    if (echoComplete) {
+      const progress = questProgress();
+      elements.echoRewardTitle.textContent = progress >= 3 ? "Your three-day quest is complete." : "One thing carried forward.";
+      elements.echoRewardText.textContent = computeStreak().repaired ? "You missed a day, not the thread. Your ripple is still moving." : "Your well grew a little deeper today.";
+      elements.echoQuestText.textContent = `${NEED_LABELS[state.habit?.questGoal || state.habit?.goal || "clarity"]} Quest · ${progress} / 3`;
+      elements.echoXpText.textContent = `${Math.max(0, Number(state.habit?.xp || 0))} ripples`;
+    }
+  }
+  if (elements.premiumPreview) elements.premiumPreview.hidden = !(echoComplete && !isPremium && !isFollowUp);
+  if (elements.reflectionFeedback) elements.reflectionFeedback.hidden = Boolean(record.isMonthly) || safetyResponse || Boolean(record.feedback);
+  if (elements.feedbackThanks) elements.feedbackThanks.hidden = !record.feedback;
+  for (const button of elements.feedbackButtons || []) button.classList.toggle("selected", button.dataset.feedback === record.feedback);
+  if (elements.listenControl) {
+    const supported = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance);
+    elements.listenControl.classList.toggle("unsupported", !supported);
+    if (supported) {
+      const seconds = estimatedListenSeconds(record);
+      elements.listenStatus.textContent = record.listenedAt ? "Reflection heard." : `About ${seconds} sec · or read below`;
+      elements.listenIcon.textContent = record.listenedAt ? "↻" : "▶";
+      elements.listenLabel.textContent = record.listenedAt ? "Hear it again" : "Hear your reflection";
+    }
+  }
+  trackEvent("reflection_rendered", { kind: record.responseKind || "wish", coin: record.coinSource, goal: record.goal || state.habit?.goal || "clarity" });
   runtime.busy = false;
   setTimeout(() => elements.responseCard.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
 }
@@ -1437,8 +1776,8 @@ function purchaseContextForFollowUp(coin) {
 function resetPurchaseContext() {
   const title = document.querySelector("#pennyModalTitle");
   const lead = document.querySelector("#pennyModalLead");
-  if (title) title.textContent = "Keep the conversation going";
-  if (lead) lead.textContent = "The free penny gives you the first answer. Paid pennies are for continuing a wish you actually care about.";
+  if (title) title.textContent = "Keep your well growing";
+  if (lead) lead.textContent = "Your Daily Echo stays free. Copper and Moon are for the moments you want to stay with the same thread instead of starting over.";
 }
 
 async function beginFreeFollowUp() {
@@ -1996,6 +2335,10 @@ function registerPWA() {
 function bindEvents() {
   elements.wishInput.addEventListener("input", () => {
     const length = elements.wishInput.value.length;
+    if (!runtime.composerStarted && length > 0) {
+      runtime.composerStarted = true;
+      trackEvent("wish_input_started", { goal: state.habit?.goal || "clarity" });
+    }
     elements.characterCount.textContent = `${length} / 600`;
     elements.characterCount.hidden = length < 450;
     runtime.wishClarification = "";
@@ -2005,6 +2348,36 @@ function bindEvents() {
   });
   elements.wishInput.addEventListener("keydown", event => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") preparePenny();
+  });
+  for (const button of elements.needButtons || []) {
+    button.addEventListener("click", () => {
+      state.habit.goal = button.dataset.need || "clarity";
+      saveState();
+      updateUI();
+      trackEvent("goal_selected", { goal: state.habit.goal });
+    });
+  }
+  elements.listenButton?.addEventListener("click", toggleListen);
+  elements.commitActionButton?.addEventListener("click", () => completeDailyEcho(runtime.currentRecord, "commit"));
+  elements.heardEnoughButton?.addEventListener("click", () => completeDailyEcho(runtime.currentRecord, "heard"));
+  elements.followThroughYes?.addEventListener("click", () => resolveActionCheckin(true));
+  elements.followThroughLater?.addEventListener("click", () => resolveActionCheckin(false));
+  for (const button of elements.feedbackButtons || []) {
+    button.addEventListener("click", () => {
+      const record = runtime.currentRecord;
+      if (!record || record.feedback) return;
+      record.feedback = button.dataset.feedback;
+      state.habit.feedbackCount = Math.max(0, Number(state.habit.feedbackCount || 0)) + 1;
+      saveState();
+      trackEvent("reflection_feedback", { rating: record.feedback, goal: record.goal || state.habit.goal });
+      showResponse(record);
+      showToast("Thanks. That helps the well get better.");
+    });
+  }
+  elements.premiumPreviewButton?.addEventListener("click", () => {
+    resetPurchaseContext();
+    trackEvent("paywall_viewed", { placement: "post_echo_preview" });
+    openOverlay(elements.pennyModal);
   });
   elements.readyButton.addEventListener("click", preparePenny);
   elements.clarifierButton?.addEventListener("click", acceptWishClarification);
@@ -2160,6 +2533,8 @@ async function init() {
   elements.readyButton.disabled = true;
   updateUI();
   registerPWA();
+  trackEvent("session_started", { returning: state.wishes.length > 0, version: CLIENT_VERSION });
+  trackEvent("composer_viewed", { placement: "home", goal: state.habit?.goal || "clarity" });
 
   // Capture the browser wallet before cloud sync. A successful webhook can update
   // Supabase while the customer is still on Checkout, so this baseline is needed

@@ -12,7 +12,7 @@ import {
   uuidLike
 } from "../lib/well-core.js";
 
-const RESPONSE_VERSION = "1.7.5";
+const RESPONSE_VERSION = "1.8.0";
 
 const rateBuckets = globalThis.__listeningWellRateBuckets || new Map();
 globalThis.__listeningWellRateBuckets = rateBuckets;
@@ -164,6 +164,13 @@ export default async function handler(req, res) {
         })).filter(item => item.wish)
       : [];
     const coinIntent = normalizeCoinIntent(body.coinIntent);
+    const goal = ["clarity","calm","courage","let_go","focus","other"].includes(body.goal) ? body.goal : "clarity";
+    const experienceMode = body.experienceMode === "daily_echo" ? "daily_echo" : "wish";
+    const habitContext = body.habitContext && typeof body.habitContext === "object" ? {
+      questId: String(body.habitContext.questId || "").slice(0, 60),
+      questDay: Math.max(0, Math.min(7, Number(body.habitContext.questDay || 0))),
+      preferredMode: ["read","listen","both"].includes(body.habitContext.preferredMode) ? body.habitContext.preferredMode : "read"
+    } : null;
     const clarification = sanitizeWish(body.clarification).slice(0, 500);
     const followUp = body.followUp && typeof body.followUp === "object" ? {
       parentCloudId: uuidLike(body.followUp.parentCloudId) ? body.followUp.parentCloudId : null,
@@ -253,6 +260,8 @@ Additional detail: ${clarification}` : ""}`;
           apiKey: process.env.OPENAI_API_KEY,
           model: process.env.OPENAI_MODEL || "gpt-5",
           depth,
+          goal,
+          habitContext,
           safetyIdentifier: sessionId
         });
       } catch (error) {
@@ -290,7 +299,13 @@ Additional detail: ${clarification}` : ""}`;
       cloudSaved,
       responseKind: followUp ? "follow_up" : "wish",
       followUpTier: freeFollowUp ? "free" : followUp ? "paid" : null,
-      responseVersion: RESPONSE_VERSION
+      responseVersion: RESPONSE_VERSION,
+      experience: {
+        mode: experienceMode,
+        goal,
+        meaningfulDayEligible: !response.safety,
+        questId: habitContext?.questId || `${goal}_3_day`
+      }
     });
   } catch (error) {
     console.error(error);

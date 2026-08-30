@@ -13,6 +13,6 @@ export default async function handler(req, res) {
     database,
     payments: Boolean(database && process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && stripePrices),
     appName: "Throw a Penny",
-    version: "1.7.5"
+    version: "1.8.0"
   });
 }

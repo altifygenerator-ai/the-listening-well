@@ -131,3 +131,8 @@ The current build includes a client/server version handshake, retired-response f
 ## v1.7.5 response reliability repair
 
 The customer wish path now prioritizes reliability over strict output machinery. It uses the basic Responses API shape first, has compatibility model fallbacks, never discards a valid answer because cloud storage failed afterward, and restores a consumed penny when generation itself truly fails. The admin OpenAI diagnostic exercises the same shared wish-generation path used by customers.
+
+
+## v1.8.0 Daily Echo retention rebuild
+
+The home experience now centers on a 60-second Daily Echo, with need chips, browser listening playback, a tiny action commitment, visible ripples/streak/3-day quest progress, return check-ins, helpfulness feedback, and an earlier non-blocking premium preview. Durable privacy-safe funnel events can be stored in Supabase after running `supabase/migrations/20260830_daily_echo_analytics.sql`. Existing Stripe products and prices are unchanged. See `DAILY_ECHO_RETENTION_UPDATE_V1_8.md`.

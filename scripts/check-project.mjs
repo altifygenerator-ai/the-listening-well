@@ -417,7 +417,7 @@ async function freeFollowUpAudit() {
 
   const body = {
     sessionId,
-    clientVersion: "1.7.5",
+    clientVersion: "1.8.0",
     wish: "I wish my sister and I could talk without every conversation becoming an argument",
     coinIntent: "free",
     followUp: {
@@ -660,7 +660,7 @@ async function refundAudit() {
     await handler(request({
       method: "POST",
       headers: { "x-forwarded-for": "192.0.2.10" },
-      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.7.5", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
+      body: { sessionId: "33333333-3333-4333-8333-333333333333", clientVersion: "1.8.0", wish: "I wish for a fresh start", coinIntent: "moon", priorThemes: [] }
     }), res);
     assert.equal(res.statusCode, 200, res.body);
     const payload = res.json();
@@ -706,7 +706,7 @@ async function generationFailureRestoresCoinAudit() {
     const res = responseRecorder();
     await handler(request({ method: "POST", body: {
       sessionId: "22222222-2222-4222-8222-222222222222",
-      clientVersion: "1.7.5",
+      clientVersion: "1.8.0",
       wish: "I wish I was taller",
       coinIntent: "copper"
     } }), res);

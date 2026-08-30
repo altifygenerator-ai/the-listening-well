@@ -13,6 +13,7 @@ import cancelKeeperHandler from "./api/cancel-keeper.js";
 import webhookHandler from "./api/stripe-webhook.js";
 import monthlyHandler from "./api/monthly.js";
 import deleteSessionHandler from "./api/delete-session.js";
+import eventsHandler from "./api/events.js";
 import adminSetupHandler from "./api/admin-setup.js";
 import adminLoginHandler from "./api/admin-login.js";
 import adminLogoutHandler from "./api/admin-logout.js";
@@ -35,6 +36,7 @@ const apiRoutes = new Map([
   ["/api/stripe-webhook", webhookHandler],
   ["/api/monthly", monthlyHandler],
   ["/api/delete-session", deleteSessionHandler],
+  ["/api/events", eventsHandler],
   ["/api/admin/setup", adminSetupHandler],
   ["/api/admin/login", adminLoginHandler],
   ["/api/admin/logout", adminLogoutHandler],

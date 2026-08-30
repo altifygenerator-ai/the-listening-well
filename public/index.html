@@ -15,7 +15,7 @@
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="google-site-verification" content="KwEGfy95f_I9gBehCcN_p7di46od8c_Q6RVu2uMQdUg" />
-  <meta name="description" content="Make a private wish, toss a digital penny into the well, and get a thoughtful response you can save, revisit, or share without revealing the wish." />
+  <meta name="description" content="Take a private 60-second Daily Echo: name what you need, drop a penny, hear a thoughtful reflection, and carry one useful thing into your day." />
   <meta name="author" content="Throw a Penny" />
   <link rel="canonical" href="https://throwapenny.com/" />
   <link rel="sitemap" type="application/xml" href="https://throwapenny.com/sitemap.xml" />
@@ -25,7 +25,7 @@
   <meta property="og:locale" content="en_US" />
   <meta property="og:url" content="https://throwapenny.com/" />
   <meta property="og:title" content="Throw a Penny | The Listening Well" />
-  <meta property="og:description" content="Make a private wish, toss a digital penny, and hear the thoughtful echo waiting in the well." />
+  <meta property="og:description" content="Take a private 60-second Daily Echo and hear one thoughtful thing worth carrying forward." />
   <meta property="og:image" content="https://throwapenny.com/og-image.png" />
   <meta property="og:image:secure_url" content="https://throwapenny.com/og-image.png" />
   <meta property="og:image:type" content="image/png" />
@@ -35,7 +35,7 @@
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Throw a Penny | The Listening Well" />
-  <meta name="twitter:description" content="Make a private wish, toss a digital penny, and hear the thoughtful echo waiting in the well." />
+  <meta name="twitter:description" content="Take a private 60-second Daily Echo and hear one thoughtful thing worth carrying forward." />
   <meta name="twitter:image" content="https://throwapenny.com/og-image.png" />
   <meta name="twitter:image:alt" content="The Listening Well under a moonlit sky" />
 
@@ -43,7 +43,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="/styles.css?v=1.7.5" />
+  <link rel="stylesheet" href="/styles.css?v=1.8.0" />
   <title>Throw a Penny | A Digital Wishing Well</title>
 
   <script type="application/ld+json">
@@ -56,7 +56,7 @@
         "url": "https://throwapenny.com/",
         "name": "Throw a Penny",
         "alternateName": "The Listening Well",
-        "description": "A private digital wishing-well experience with thoughtful responses you can save, revisit, and share.",
+        "description": "A private daily listening ritual with thoughtful reflections, tiny next steps, progress, and a digital wishing-well experience.",
         "inLanguage": "en-US"
       },
       {
@@ -65,7 +65,7 @@
         "url": "https://throwapenny.com/",
         "name": "Throw a Penny",
         "alternateName": "The Listening Well",
-        "description": "Make a private wish, throw a digital penny into the well, and receive a thoughtful response with something useful to carry forward.",
+        "description": "Choose what you need, share one honest sentence, throw a digital penny, and receive a thoughtful Daily Echo with one useful thing to carry forward.",
         "applicationCategory": "EntertainmentApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires a modern web browser with JavaScript enabled.",
@@ -105,6 +105,15 @@
         </button>
       </nav>
     </header>
+
+    <section class="habit-strip" id="habitStrip" hidden aria-label="Your Listening Well progress">
+      <div class="habit-stat"><strong id="streakCount">0</strong><span>day ripple</span></div>
+      <div class="habit-progress">
+        <div><span id="questName">3-day Clarity Quest</span><strong id="questProgressText">0 / 3</strong></div>
+        <span class="habit-progress-track" aria-hidden="true"><i id="questProgressFill"></i></span>
+      </div>
+      <div class="habit-stat"><strong id="weekListeningDays">0 / 7</strong><span>listening days</span></div>
+    </section>
 
     <main class="experience" id="experience">
       <section class="sky-scene" aria-label="A moonlit wishing well">
@@ -158,25 +167,44 @@
         </div>
 
         <section class="intro-copy" id="introCopy">
-          <p class="eyebrow">A private place for one honest wish</p>
-          <h1>Throw a penny.<br />Hear what comes back.</h1>
-          <p>One private wish. One free penny. No account needed.</p>
+          <p class="eyebrow">Your private 60-second Daily Echo</p>
+          <h1>Come for a minute.<br />Hear yourself more clearly.</h1>
+          <p>One free Daily Echo. No account needed. Your wish stays private by default.</p>
         </section>
 
         <section class="wish-composer glass-panel" id="wishComposer" aria-labelledby="wishPrompt">
           <div class="composer-heading">
             <div>
-              <p class="step-label">Your penny is waiting</p>
-              <h2 id="wishPrompt">What are you wishing for?</h2>
+              <p class="step-label">Today’s Daily Echo</p>
+              <h2 id="wishPrompt">What do you need the well to help you hear today?</h2>
             </div>
             <span class="privacy-mark" title="Private by default">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6.5 10h11A1.5 1.5 0 0 1 19 11.5v7A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10Z"/></svg>
               Private
             </span>
           </div>
-          <label class="sr-only" for="wishInput">Type your private wish</label>
-          <textarea id="wishInput" maxlength="600" rows="3" placeholder="I wish…" autocomplete="off"></textarea>
-          <p class="composer-tip">One real detail helps: what happened, what you want, or what feels stuck.</p>
+          <div class="return-checkin" id="followThroughCard" hidden>
+            <span class="return-checkin-mark" aria-hidden="true">↺</span>
+            <div><strong>Yesterday you chose one small step.</strong><p id="followThroughText">Did anything shift?</p></div>
+            <div class="return-checkin-actions">
+              <button type="button" id="followThroughYes">Yes</button>
+              <button type="button" id="followThroughLater">Not yet</button>
+            </div>
+          </div>
+          <div class="need-picker" role="group" aria-label="What kind of help do you want today?">
+            <span>Choose what you need</span>
+            <div class="need-options">
+              <button type="button" data-need="clarity">Clarity</button>
+              <button type="button" data-need="calm">Calm</button>
+              <button type="button" data-need="courage">Courage</button>
+              <button type="button" data-need="let_go">Let go</button>
+              <button type="button" data-need="focus">Focus</button>
+              <button type="button" data-need="other">Something else</button>
+            </div>
+          </div>
+          <label class="sr-only" for="wishInput">Say or type one private sentence</label>
+          <textarea id="wishInput" maxlength="600" rows="3" placeholder="What’s on your mind?" autocomplete="off"></textarea>
+          <p class="composer-tip"><strong>One sentence is enough.</strong> One real detail helps the well listen better.</p>
           <p class="wish-nudge" id="wishNudge" hidden>Give the well one more detail so it does not have to guess.</p>
           <div class="wish-clarifier" id="wishClarifier" hidden>
             <span>The well needs one thing clearer</span>
@@ -189,7 +217,7 @@
           </div>
           <div class="composer-footer">
             <span id="characterCount" hidden>0 / 600</span>
-            <button class="primary-button" id="readyButton">Ready my penny</button>
+            <button class="primary-button" id="readyButton">Drop in for 60 seconds</button>
           </div>
         </section>
 
@@ -212,13 +240,17 @@
 
         <section class="listening-state" id="listeningState" hidden aria-live="polite">
           <span class="listening-rings"><i></i><i></i><i></i></span>
-          <p>The well is listening<span class="thinking-dots"><i>.</i><i>.</i><i>.</i></span></p>
+          <p>Listening for what is specific to you<span class="thinking-dots"><i>.</i><i>.</i><i>.</i></span></p>
         </section>
 
         <section class="response-card glass-panel" id="responseCard" hidden aria-live="polite">
           <button class="close-response" id="closeResponse" aria-label="Close response">×</button>
           <div class="response-mark" aria-hidden="true">◌</div>
-          <p class="eyebrow" id="responseModeLabel">The water answers</p>
+          <p class="eyebrow" id="responseModeLabel">What the well hears</p>
+          <div class="listen-control" id="listenControl">
+            <button type="button" id="listenButton" class="listen-button"><span id="listenIcon">▶</span><span id="listenLabel">Hear your reflection</span></button>
+            <span id="listenStatus">Listen or read, whichever helps.</span>
+          </div>
           <blockquote id="answerText"></blockquote>
           <div class="response-divider"><span></span></div>
           <details class="response-insight" id="responseInsight">
@@ -226,13 +258,42 @@
             <p id="meaningText"></p>
           </details>
           <div class="carry-card">
-            <span>One thing worth doing</span>
+            <span>One thing for today</span>
             <p id="nextStepText"></p>
+            <div class="carry-actions" id="carryActions">
+              <button type="button" class="carry-primary" id="commitActionButton">I’ll do this</button>
+              <button type="button" class="carry-secondary" id="heardEnoughButton">I just needed to hear this</button>
+            </div>
+            <p class="carry-complete" id="carryCompleteText" hidden></p>
           </div>
           <div class="moon-note-card" id="moonNoteCard" hidden>
             <span>A note from farther down the path</span>
             <p id="moonNoteText"></p>
           </div>
+          <section class="echo-reward" id="echoReward" hidden aria-live="polite">
+            <div class="echo-reward-mark">◌</div>
+            <div>
+              <p class="eyebrow">Daily Echo complete</p>
+              <h3 id="echoRewardTitle">One thing carried forward.</h3>
+              <p id="echoRewardText">Your well grew a little deeper today.</p>
+              <div class="echo-reward-progress"><span id="echoQuestText">Clarity Quest · 1 / 3</span><strong id="echoXpText">+10 ripples</strong></div>
+            </div>
+          </section>
+          <section class="reflection-feedback" id="reflectionFeedback">
+            <span>Was this useful right now?</span>
+            <div>
+              <button type="button" data-feedback="very">Very</button>
+              <button type="button" data-feedback="somewhat">Somewhat</button>
+              <button type="button" data-feedback="not_yet">Not yet</button>
+            </div>
+            <p id="feedbackThanks" hidden>Thanks. That helps the well get better.</p>
+          </section>
+          <section class="premium-preview" id="premiumPreview" hidden>
+            <p class="eyebrow">Keep your well growing</p>
+            <h3>When one answer isn’t enough</h3>
+            <p>Copper keeps the same thread practical. Moon gives it a deeper second angle. Well Keeper is there if this becomes part of your routine.</p>
+            <button type="button" class="secondary-button" id="premiumPreviewButton">See deeper options</button>
+          </section>
           <section class="upgrade-offer" id="upgradeOffer" hidden>
             <div class="upgrade-glow" aria-hidden="true"></div>
             <p class="eyebrow" id="upgradeEyebrow">One more ripple</p>
@@ -285,8 +346,8 @@
         </header>
 
         <div class="stats-row">
-          <div><strong id="totalRipples">0</strong><span>Ripples</span></div>
-          <div><strong id="daysVisited">1</strong><span>Days visited</span></div>
+          <div><strong id="totalRipples">0</strong><span>Ripples earned</span></div>
+          <div><strong id="daysVisited">0</strong><span>Listening days</span></div>
           <div><strong id="gardenDepth">Still</strong><span>Well depth</span></div>
         </div>
 
@@ -342,9 +403,9 @@
       <div class="modal-card purchase-modal-card" role="dialog" aria-modal="true" aria-labelledby="pennyModalTitle">
         <button class="modal-close" data-close-modal aria-label="Close">×</button>
         <div class="modal-coin" aria-hidden="true">1¢</div>
-        <p class="eyebrow">For wishes worth staying with</p>
-        <h2 id="pennyModalTitle">Keep the conversation going</h2>
-        <p class="modal-lead" id="pennyModalLead">The free penny gives you the first answer. Paid pennies are for continuing a wish you actually care about.</p>
+        <p class="eyebrow">More depth when you want it</p>
+        <h2 id="pennyModalTitle">Keep your well growing</h2>
+        <p class="modal-lead" id="pennyModalLead">Your Daily Echo stays free. Copper and Moon are for the moments you want to stay with the same thread instead of starting over.</p>
         <p class="wallet-inline">In your well: <span><b id="walletDaily">1</b> daily</span> · <span><b id="walletCopper">0</b> Copper</span> · <span><b id="walletMoon">0</b> Moon</span></p>
         <div class="price-options value-options">
           <button class="price-card value-card" data-pack="copper_10">
@@ -369,9 +430,9 @@
           <span>Stays with this browser</span>
         </div>
         <details class="keeper-option" id="keeperDetails">
-          <summary>Use the well a lot? See Well Keeper</summary>
+          <summary>Making this a habit? See Well Keeper</summary>
           <button class="price-card keeper-card" data-pack="keeper_monthly">
-            <span><strong>Well Keeper</strong><small>90 Moon pennies added each month</small></span>
+            <span><strong>Well Keeper</strong><small>90 Moon pennies each month for a deeper regular practice</small></span>
             <b>$4.99<small>/mo</small></b>
           </button>
         </details>
@@ -464,6 +525,6 @@
     });
   </script>
   <script defer src="/_vercel/insights/script.js"></script>
-  <script type="module" src="/app.js?v=1.7.5"></script>
+  <script type="module" src="/app.js?v=1.8.0"></script>
 </body>
 </html>

@@ -330,3 +330,26 @@ grant execute on function public.restore_well_coin(uuid, text) to service_role;
 grant execute on function public.grant_well_credits(uuid, integer, text, boolean, text, text, text, text) to service_role;
 grant execute on function public.set_well_subscription(uuid, boolean, text) to service_role;
 grant execute on function public.record_well_webhook_event(text, text, text, text) to service_role;
+
+
+-- v1.8 Daily Echo analytics. Never store wish/answer/journal text in properties.
+
+create table if not exists public.analytics_events (
+  event_id uuid primary key,
+  session_id uuid not null references public.well_profiles(session_id) on delete cascade,
+  event_name text not null check (char_length(event_name) between 2 and 80),
+  occurred_at timestamptz not null default now(),
+  app_version text,
+  experiment_id text,
+  variant text,
+  properties jsonb not null default '{}'::jsonb
+);
+
+create index if not exists analytics_events_session_time_idx
+  on public.analytics_events(session_id, occurred_at desc);
+create index if not exists analytics_events_name_time_idx
+  on public.analytics_events(event_name, occurred_at desc);
+
+alter table public.analytics_events enable row level security;
+grant insert, select on public.analytics_events to service_role;
+-- No anon/authenticated policies. Server/service-role only, matching the rest of the well.

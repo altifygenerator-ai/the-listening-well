@@ -1,5 +1,5 @@
-const CACHE = "listening-well-v13";
-const APP_SHELL = ["/", "/styles.css?v=1.7.5", "/app.js?v=1.7.5", "/manifest.webmanifest", "/icon.svg"];
+const CACHE = "listening-well-v14";
+const APP_SHELL = ["/", "/styles.css?v=1.8.0", "/app.js?v=1.8.0", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
